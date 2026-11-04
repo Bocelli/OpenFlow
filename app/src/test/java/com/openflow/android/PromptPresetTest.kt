@@ -23,9 +23,7 @@ class PromptPresetTest {
         for (preset in PromptPreset.values()) {
             assertTrue(preset.title.isNotBlank())
             assertTrue(preset.description.isNotBlank())
-            if (preset != PromptPreset.RAW) {
-                assertTrue(preset.prompt.isNotBlank())
-            }
+            assertTrue(preset.prompt.isNotBlank())
         }
     }
 

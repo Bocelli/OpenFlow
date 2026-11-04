@@ -155,18 +155,15 @@ class FlowAccessibilityService : AccessibilityService() {
             recordedFile.delete()
 
             response.onSuccess { output ->
-                if (output.isFallback && output.errorMessage != null) {
-                    showNotificationAlert("⚠️ OpenFlow: Fallback Trascrizione Grezza", output.errorMessage)
-                    mainHandler.post {
-                        android.widget.Toast.makeText(
-                            applicationContext,
-                            "⚠️ Fallito LLM: ${output.errorMessage}",
-                            android.widget.Toast.LENGTH_LONG
-                        ).show()
-                    }
+                val textToInsert = if (output.isFallback && output.errorMessage != null) {
+                    showNotificationAlert("⚠️ OpenFlow: Fallito LLM", output.errorMessage)
+                    "[⚠️ Fallback Whisper - Errore LLM: ${output.errorMessage}]\n\n${output.text}"
+                } else {
+                    output.text
                 }
-                if (output.text.isNotBlank()) {
-                    insertTextIntoActiveField(output.text)
+
+                if (textToInsert.isNotBlank()) {
+                    insertTextIntoActiveField(textToInsert)
                     bubbleOverlay?.updateState(BubbleState.SUCCESS)
                 } else {
                     bubbleOverlay?.updateState(BubbleState.IDLE)

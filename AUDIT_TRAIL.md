@@ -35,6 +35,11 @@
     - Added automatic instant fallback to `llama-3.1-8b-instant` (30,000 TPM, <100ms) on Groq if 70B fails or is rate-limited.
     - Added high-priority Android Notification alerts so API or LLM errors are never silenced by background Toast restrictions.
     - Streamlined prompt tokens to ~450 with canonical few-shot based on real-world dictation ("MicFlow").
+  - Fixed Silent Failure in LLM Pipeline:
+    - Removed `PromptPreset.RAW` to eliminate the possibility of accidentally disabling AI formatting.
+    - Fixed JSON parser bug: if choices were missing, it previously returned `Result.success(rawText)`, which tricked the pipeline into thinking the call succeeded and prevented fallback.
+    - Removed `contextText` pollution from system prompt to stop confusing Llama with prior draft text.
+    - Added explicit in-field diagnostic prefix on fallback so any API failure is immediately visible.
   - Compiled and verified debug APK: `OpenFlow-debug.apk` (16.4 MB) ready for deployment.
   - Implemented core Android architecture:
     - `data/PreferencesManager.kt`: EncryptedSharedPreferences, OpenAI & Groq endpoints, prompt presets.

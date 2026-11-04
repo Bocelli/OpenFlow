@@ -52,14 +52,8 @@ class AiPipelineClient(private val prefs: PreferencesManager) {
 
         Log.d(TAG, "RAW WHISPER: '$rawTranscription'")
 
-        // Se l'utente ha selezionato "Trascrizione Pura (Zero IA)", salta l'LLM
-        if (prefs.activePreset == PromptPreset.RAW) {
-            val sanitized = sanitizeAndFormatText(rawTranscription)
-            return@withContext Result.success(PipelineOutput(text = sanitized))
-        }
-
         // 2. STADIO 2: Polishing e formattazione con LLM
-        val llmResult = polishTextWithLlm(rawTranscription, surroundingContext, apiKey, provider)
+        val llmResult = polishTextWithLlm(rawTranscription, apiKey, provider)
 
         val finalOutput = if (llmResult.isSuccess) {
             val polished = llmResult.getOrThrow()
@@ -68,7 +62,6 @@ class AiPipelineClient(private val prefs: PreferencesManager) {
         } else {
             val err = llmResult.exceptionOrNull()?.message ?: "Errore sconosciuto"
             Log.e(TAG, "LLM FALLITO: $err. Uso fallback Whisper grezzo.", llmResult.exceptionOrNull())
-            // Fallback: pulisce comunque maiuscole e duplicazioni anche sul testo grezzo!
             PipelineOutput(
                 text = sanitizeAndFormatText(rawTranscription),
                 isFallback = true,
@@ -122,12 +115,14 @@ class AiPipelineClient(private val prefs: PreferencesManager) {
 
     private fun polishTextWithLlm(
         rawText: String,
-        contextText: String?,
         apiKey: String,
         provider: com.openflow.android.data.ApiProvider
     ): Result<String> {
+        val cleanKey = apiKey.trim()
+        val cleanBaseUrl = provider.baseUrl.trim().removeSuffix("/")
+
         // 1. Tentativo Primario (es. Llama 3.3 70B Versatile su Groq o GPT-4o-mini su OpenAI)
-        val primaryResult = executeLlmCall(rawText, contextText, apiKey, provider.baseUrl, provider.llmModel)
+        val primaryResult = executeLlmCall(rawText, cleanKey, cleanBaseUrl, provider.llmModel)
         if (primaryResult.isSuccess) {
             return primaryResult
         }
@@ -135,11 +130,11 @@ class AiPipelineClient(private val prefs: PreferencesManager) {
         val primaryError = primaryResult.exceptionOrNull()?.message ?: "Errore sconosciuto"
         Log.w(TAG, "Tentativo primario fallito con ${provider.llmModel}: $primaryError")
 
-        // 2. Fallback Istantaneo per Groq: se 70B fallisce per rate limit (HTTP 429) o timeout,
-        // ritenta immediatamente con Llama 3.1 8B Instant (30.000 TPM, throughput ultra-veloce, zero 429)
+        // 2. Fallback Istantaneo per Groq: se 70B fallisce (rate limit 429, timeout, ecc.),
+        // ritenta immediatamente con Llama 3.1 8B Instant (30.000 TPM, throughput ultra-veloce, zero blocchi)
         if (provider == com.openflow.android.data.ApiProvider.GROQ && provider.llmModel != "llama-3.1-8b-instant") {
             Log.i(TAG, "Eseguo fallback istantaneo su Groq 'llama-3.1-8b-instant'...")
-            val fallbackResult = executeLlmCall(rawText, contextText, apiKey, provider.baseUrl, "llama-3.1-8b-instant")
+            val fallbackResult = executeLlmCall(rawText, cleanKey, cleanBaseUrl, "llama-3.1-8b-instant")
             if (fallbackResult.isSuccess) {
                 Log.i(TAG, "Fallback Groq 8B riuscito con successo!")
                 return fallbackResult
@@ -151,16 +146,12 @@ class AiPipelineClient(private val prefs: PreferencesManager) {
 
     private fun executeLlmCall(
         rawText: String,
-        contextText: String?,
         apiKey: String,
         baseUrl: String,
         modelName: String
     ): Result<String> {
         val preset = prefs.activePreset
-        var systemInstruction = preset.prompt
-        if (!contextText.isNullOrBlank()) {
-            systemInstruction += "\nContesto del testo già presente nel campo: \"$contextText\""
-        }
+        val systemInstruction = preset.prompt
 
         val messagesArray = JSONArray().apply {
             put(JSONObject().apply {
@@ -200,10 +191,16 @@ class AiPipelineClient(private val prefs: PreferencesManager) {
             val choices = json.optJSONArray("choices")
             if (choices != null && choices.length() > 0) {
                 val messageObj = choices.getJSONObject(0).optJSONObject("message")
-                val content = messageObj?.optString("content", "")?.trim() ?: rawText
-                Result.success(content)
+                val content = messageObj?.optString("content", "")?.trim() ?: ""
+                if (content.isNotBlank()) {
+                    Result.success(content)
+                } else {
+                    Result.failure(IOException("Risposta LLM vuota da $modelName"))
+                }
             } else {
-                Result.success(rawText)
+                val errorObj = json.optJSONObject("error")
+                val errorMsg = errorObj?.optString("message") ?: "Nessun testo generato da $modelName"
+                Result.failure(IOException("Errore LLM ($modelName): $errorMsg"))
             }
         } catch (e: Exception) {
             Result.failure(e)

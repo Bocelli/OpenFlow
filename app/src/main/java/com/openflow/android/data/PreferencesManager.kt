@@ -73,11 +73,6 @@ enum class PromptPreset(val title: String, val description: String, val prompt: 
             Alla fine abbiamo concordato di sentirci domani mattina verso le 9:00.
         """.trimIndent()
     ),
-    RAW(
-        title = "Trascrizione Pura (Zero IA)",
-        description = "Inietta direttamente l'audio trascritto da Whisper a latenza minima (~200ms), senza filtri LLM.",
-        prompt = ""
-    ),
     PROFESSIONAL(
         title = "Professionale / Email",
         description = "Registro formale, paragrafi strutturati, ideale per comunicazioni aziendali.",
