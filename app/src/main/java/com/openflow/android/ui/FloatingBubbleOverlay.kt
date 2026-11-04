@@ -202,12 +202,18 @@ class FloatingBubbleOverlay(
         val initialXPos = screenWidth - currentWidthPx - margin
         val initialYPos = (screenHeight * 0.52f).toInt()
 
+        val initiallyVisible = !prefs.showOnlyWhenFocused
+        val flags = if (initiallyVisible) {
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
+        } else {
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
+        }
+
         val params = WindowManager.LayoutParams(
             currentWidthPx,
             currentHeightPx,
             windowType,
-            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
-                    WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
+            flags,
             PixelFormat.TRANSLUCENT
         ).apply {
             gravity = Gravity.TOP or Gravity.START
@@ -218,22 +224,25 @@ class FloatingBubbleOverlay(
         layoutParams = params
         val view = BubbleCustomView(context).apply {
             setOnTouchListener { _, event -> handleTouchEvent(event) }
+            if (!initiallyVisible) {
+                visibility = View.GONE
+            }
         }
         bubbleView = view
 
         try {
             windowManager.addView(view, params)
             isViewAttached = true
-            isVisible = true
+            isVisible = initiallyVisible
             updateState(BubbleState.IDLE)
-            Log.d(TAG, "FloatingBubbleOverlay initWindow creata con successo")
+            Log.d(TAG, "FloatingBubbleOverlay initWindow creata (initiallyVisible=$initiallyVisible)")
         } catch (e: Exception) {
             Log.e(TAG, "Errore addView overlay: ${e.message}", e)
             try {
                 params.type = WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
                 windowManager.addView(view, params)
                 isViewAttached = true
-                isVisible = true
+                isVisible = initiallyVisible
             } catch (e2: Exception) {
                 Log.e(TAG, "Errore fallback addView: ${e2.message}", e2)
             }

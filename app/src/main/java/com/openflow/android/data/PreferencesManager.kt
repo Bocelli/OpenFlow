@@ -171,8 +171,15 @@ class PreferencesManager(context: Context) {
         set(value) = prefs.edit().putString(KEY_LANGUAGE, value).apply()
 
     var showOnlyWhenFocused: Boolean
-        get() = prefs.getBoolean(KEY_SHOW_ONLY_WHEN_FOCUSED, true)
-        set(value) = prefs.edit().putBoolean(KEY_SHOW_ONLY_WHEN_FOCUSED, value).apply()
+        get() {
+            if (!prefs.contains(KEY_SHOW_ONLY_WHEN_FOCUSED_V2)) {
+                // Imposta sempre true di default per garantire la scomparsa automatica
+                prefs.edit().putBoolean(KEY_SHOW_ONLY_WHEN_FOCUSED_V2, true).apply()
+                return true
+            }
+            return prefs.getBoolean(KEY_SHOW_ONLY_WHEN_FOCUSED_V2, true)
+        }
+        set(value) = prefs.edit().putBoolean(KEY_SHOW_ONLY_WHEN_FOCUSED_V2, value).apply()
 
     var hapticFeedbackEnabled: Boolean
         get() = prefs.getBoolean(KEY_HAPTIC_ENABLED, true)
@@ -195,6 +202,7 @@ class PreferencesManager(context: Context) {
         private const val KEY_ACTIVE_PRESET = "key_active_preset"
         private const val KEY_LANGUAGE = "key_language"
         private const val KEY_SHOW_ONLY_WHEN_FOCUSED = "key_show_focused"
+        private const val KEY_SHOW_ONLY_WHEN_FOCUSED_V2 = "key_show_focused_v2"
         private const val KEY_HAPTIC_ENABLED = "key_haptic_feedback"
     }
 }
