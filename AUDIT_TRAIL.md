@@ -40,6 +40,11 @@
     - Fixed JSON parser bug: if choices were missing, it previously returned `Result.success(rawText)`, which tricked the pipeline into thinking the call succeeded and prevented fallback.
     - Removed `contextText` pollution from system prompt to stop confusing Llama with prior draft text.
     - Added explicit in-field diagnostic prefix on fallback so any API failure is immediately visible.
+  - Handled Gemini HTTP 503 High Demand Spikes via Cascade:
+    - Root cause: `gemini-3.8-flash` is experiencing temporary high demand (`HTTP 503 UNAVAILABLE`). The previous code exited early on non-404 status codes.
+    - Updated `discoverActiveGeminiModels` to return the full ordered list of active models sorted by availability: prioritizing `3.5-flash-lite` (designed for massive continuous throughput without 503s), `3.5-flash`, `3.8-flash`, and `2.5-flash`.
+    - Made the execution loop resilient: on any error (503, 429, 404, 500), it immediately cascades to the next candidate model in ~50ms.
+    - Verified compilation & tests passed: new APK `OpenFlow-debug.apk` (16.4 MB).
   - Fixed Gemini Model Deprecation via ModelService.ListModels Dynamic Discovery:
     - Analyzed Gemini error: `gemini-1.5-flash is not found for API version v1beta`.
     - Added `discoverActiveGeminiModel`: automatically queries `https://generativelanguage.googleapis.com/v1beta/models?key=...` in 100ms, filters models supporting `generateContent`, and dynamically selects the user's provisioned Flash model (e.g. `gemini-3.8-flash`, `gemini-3.5-flash`, etc.).
