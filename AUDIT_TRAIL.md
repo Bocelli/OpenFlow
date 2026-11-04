@@ -40,6 +40,18 @@
     - Fixed JSON parser bug: if choices were missing, it previously returned `Result.success(rawText)`, which tricked the pipeline into thinking the call succeeded and prevented fallback.
     - Removed `contextText` pollution from system prompt to stop confusing Llama with prior draft text.
     - Added explicit in-field diagnostic prefix on fallback so any API failure is immediately visible.
+  - Redesigned UI to Swiss Minimalist / Modern Technical Anti-Slop Aesthetic:
+    - Consulted `awesome-ai-tools-for-ui` anti-slop guidelines: purged all generic neon purple gradients, glowing borders, and visual clutter.
+    - Implemented a disciplined, restrained dark palette:
+      - Matte warm charcoal canvas (`#0C0D0F`), structured card surfaces (`#141519`), interactive surfaces (`#1B1C22`), crisp 1dp hairline borders (`#23252E`), high-contrast typography (`#F1F1F3`).
+    - Engineered fluid micro-interactions with spring physics:
+      - Modern segmented pill bar for engine selection (Groq, Gemini, OpenAI) with animated sliding indicator (`Spring.DampingRatioLowBouncy`).
+      - Tactile button compression on press (`graphicsLayer` scale 0.95f).
+      - Live status badge in TopBar (subtle emerald pulsing dot + "Pronto" / "Permessi").
+      - Unified preset selector card with smooth background crossfade (`tween(150)`) and checkmark indicators instead of clunky radio buttons.
+      - 1-click clipboard paste action for fast API key entry.
+      - Restyled floating bubble: replaced neon purple with crisp titanium hairline border (`#262832`), white recording waveform, and subtle emerald status accents.
+    - Verified compilation & tests passed: new APK `OpenFlow-debug.apk` (16.4 MB).
   - Calibrated Paragraph Density to Wispr Flow Gold Standard:
     - Analyzed user complaint & real Wispr Flow transcript: the engine was going to a new line (`\n\n`) too frequently, fragmenting thoughts into 1-sentence micro-paragraphs.
     - Root cause: previous Rule 1 contained strict `NON lasciare MAI un unico blocco continuo di testo se supera le 25 parole`, which forced models to break every ~1.5 sentences.
