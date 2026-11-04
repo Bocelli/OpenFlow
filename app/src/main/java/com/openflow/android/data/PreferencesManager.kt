@@ -190,6 +190,14 @@ class PreferencesManager(context: Context) {
         get() = prefs.getBoolean(KEY_HAPTIC_ENABLED, true)
         set(value) = prefs.edit().putBoolean(KEY_HAPTIC_ENABLED, value).apply()
 
+    var notchOffsetY: Float
+        get() = prefs.getFloat(KEY_NOTCH_OFFSET_Y, 0f)
+        set(value) = prefs.edit().putFloat(KEY_NOTCH_OFFSET_Y, value).apply()
+
+    var notchOffsetX: Float
+        get() = prefs.getFloat(KEY_NOTCH_OFFSET_X, 0f)
+        set(value) = prefs.edit().putFloat(KEY_NOTCH_OFFSET_X, value).apply()
+
     val currentApiKey: String
         get() = when (activeProvider) {
             ApiProvider.OPENAI -> openAiKey
@@ -211,5 +219,7 @@ class PreferencesManager(context: Context) {
         private const val KEY_ONBOARDING_DONE = "key_onboarding_completed"
         private const val KEY_CUSTOM_VOCABULARY = "key_custom_vocabulary"
         private const val KEY_STEALTH_MODE = "key_stealth_mode"
+        private const val KEY_NOTCH_OFFSET_Y = "key_notch_offset_y"
+        private const val KEY_NOTCH_OFFSET_X = "key_notch_offset_x"
     }
 }

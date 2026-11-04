@@ -162,7 +162,9 @@ fun MainSettingsScreen(
     var showOnlyWhenFocused by remember { mutableStateOf(prefs.showOnlyWhenFocused) }
     var stealthModeEnabled by remember { mutableStateOf(prefs.stealthModeEnabled) }
     var customVocabulary by remember { mutableStateOf(prefs.customVocabulary) }
-    var hapticEnabled by remember { mutableStateOf(prefs.hapticFeedbackEnabled) }
+    var hapticEnabled by remember { mutableStateOf(prefs.hapticFeedbackEnabled) }
+    var notchOffsetY by remember { mutableStateOf(prefs.notchOffsetY) }
+    var notchOffsetX by remember { mutableStateOf(prefs.notchOffsetX) }
     var isKeyVisible by remember { mutableStateOf(false) }
     var showHistoryVault by remember { mutableStateOf(false) }
 
@@ -660,6 +662,113 @@ fun MainSettingsScreen(
                 }
             }
 
+            // Calibrazione Dynamic Island
+            item {
+                SectionHeader(title = "CALIBRAZIONE DYNAMIC ISLAND")
+                Spacer(modifier = Modifier.height(6.dp))
+
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(CardBg)
+                        .border(1.dp, HairlineBorder, RoundedCornerShape(14.dp))
+                        .padding(horizontal = 16.dp, vertical = 14.dp)
+                ) {
+                    Text(
+                        text = "Allineamento Verticale (Su / Giù)",
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = TextPrimary
+                    )
+                    Text(
+                        text = "Offset Y: ${notchOffsetY.toInt()} dp (regola finemente l'altezza sul notch)",
+                        fontSize = 12.sp,
+                        color = TextSecondary
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Button(
+                            onClick = {
+                                val newY = (notchOffsetY - 1f).coerceIn(-15f, 20f)
+                                notchOffsetY = newY
+                                prefs.notchOffsetY = newY
+                                FlowAccessibilityService.instance?.updateNotchPosition()
+                            },
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(8.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = CardElevated)
+                        ) {
+                            Text("▲ Su (-1dp)", color = TextPrimary, fontSize = 13.sp)
+                        }
+                        Button(
+                            onClick = {
+                                val newY = (notchOffsetY + 1f).coerceIn(-15f, 20f)
+                                notchOffsetY = newY
+                                prefs.notchOffsetY = newY
+                                FlowAccessibilityService.instance?.updateNotchPosition()
+                            },
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(8.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = CardElevated)
+                        ) {
+                            Text("▼ Giù (+1dp)", color = TextPrimary, fontSize = 13.sp)
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+                    HorizontalDivider(color = HairlineBorder.copy(alpha = 0.6f), thickness = 1.dp)
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    Text(
+                        text = "Allineamento Orizzontale (Sinistra / Destra)",
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = TextPrimary
+                    )
+                    Text(
+                        text = "Offset X: ${notchOffsetX.toInt()} dp",
+                        fontSize = 12.sp,
+                        color = TextSecondary
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Button(
+                            onClick = {
+                                val newX = (notchOffsetX - 1f).coerceIn(-20f, 20f)
+                                notchOffsetX = newX
+                                prefs.notchOffsetX = newX
+                                FlowAccessibilityService.instance?.updateNotchPosition()
+                            },
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(8.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = CardElevated)
+                        ) {
+                            Text("◀ Sinistra (-1dp)", color = TextPrimary, fontSize = 13.sp)
+                        }
+                        Button(
+                            onClick = {
+                                val newX = (notchOffsetX + 1f).coerceIn(-20f, 20f)
+                                notchOffsetX = newX
+                                prefs.notchOffsetX = newX
+                                FlowAccessibilityService.instance?.updateNotchPosition()
+                            },
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(8.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = CardElevated)
+                        ) {
+                            Text("▶ Destra (+1dp)", color = TextPrimary, fontSize = 13.sp)
+                        }
+                    }
+                }
+            }
+
             // 7. Strumenti & Guida
             item {
                 SectionHeader(title = "STRUMENTI & GUIDA")

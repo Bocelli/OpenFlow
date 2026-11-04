@@ -131,6 +131,8 @@ class FloatingBubbleOverlay(
         view.scaleX = 1f
         view.scaleY = 1f
 
+        params.x = dpToPx(prefs.notchOffsetX)
+        params.y = dpToPx(TOP_OFFSET_DP + prefs.notchOffsetY)
         params.flags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
                 WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
                 WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
@@ -211,8 +213,8 @@ class FloatingBubbleOverlay(
             PixelFormat.TRANSLUCENT
         ).apply {
             gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL
-            x = 0
-            y = dpToPx(TOP_OFFSET_DP)
+            x = dpToPx(prefs.notchOffsetX)
+            y = dpToPx(TOP_OFFSET_DP + prefs.notchOffsetY)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
                 layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS
             }
@@ -269,6 +271,17 @@ class FloatingBubbleOverlay(
         if (view.alpha < 0.95f) {
             view.animate().alpha(1.0f).setDuration(160).start()
         }
+    }
+
+    fun updateNotchPosition() {
+        val params = layoutParams ?: return
+        val view = bubbleView ?: return
+        params.x = dpToPx(prefs.notchOffsetX)
+        params.y = dpToPx(TOP_OFFSET_DP + prefs.notchOffsetY)
+        try {
+            windowManager.updateViewLayout(view, params)
+        } catch (_: Exception) {}
+        view.invalidate()
     }
 
     fun cancelStealth() {
@@ -368,8 +381,8 @@ class FloatingBubbleOverlay(
                 currentHeightPx = h
                 params.width = w
                 params.height = h
-                params.x = 0
-                params.y = dpToPx(TOP_OFFSET_DP)
+                params.x = dpToPx(prefs.notchOffsetX)
+                params.y = dpToPx(TOP_OFFSET_DP + prefs.notchOffsetY)
                 try {
                     windowManager.updateViewLayout(view, params)
                 } catch (_: Exception) {}
@@ -771,12 +784,12 @@ class FloatingBubbleOverlay(
 
     companion object {
         private const val TAG = "NotchIslandOverlay"
-        private const val IDLE_WIDTH_DP = 46f
-        private const val IDLE_HEIGHT_DP = 36f
+        private const val IDLE_WIDTH_DP = 33f
+        private const val IDLE_HEIGHT_DP = 33f
         private const val RECORDING_WIDTH_DP = 216f
-        private const val RECORDING_HEIGHT_DP = 38f
+        private const val RECORDING_HEIGHT_DP = 34f
         private const val PROCESSING_WIDTH_DP = 152f
         private const val SUCCESS_WIDTH_DP = 142f
-        private const val TOP_OFFSET_DP = 4f
+        private const val TOP_OFFSET_DP = 0f
     }
 }

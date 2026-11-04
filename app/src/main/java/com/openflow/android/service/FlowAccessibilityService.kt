@@ -125,6 +125,10 @@ class FlowAccessibilityService : AccessibilityService() {
         return bubbleOverlay?.isVisible == true
     }
 
+    fun updateNotchPosition() {
+        bubbleOverlay?.updateNotchPosition()
+    }
+
     private fun initBubbleOverlay() {
         if (bubbleOverlay == null) {
             bubbleOverlay = FloatingBubbleOverlay(
