@@ -34,7 +34,7 @@ class AiPipelineClient(private val prefs: PreferencesManager) {
 
         val provider = prefs.activeProvider
 
-        // 1. STADIO 1: Speech-To-Text con Whisper
+        // 1. STADIO 1: Speech-To-Text con Whisper ottimizzato
         val rawTranscription = transcribeAudio(audioFile, apiKey, provider)
             .getOrElse { return@withContext Result.failure(it) }
 
@@ -49,7 +49,10 @@ class AiPipelineClient(private val prefs: PreferencesManager) {
                 rawTranscription
             }
 
-        Result.success(polishedText)
+        // Pulizia finale da eventuali residui di prefissi o virgolette
+        val cleanedText = sanitizeLlmOutput(polishedText)
+
+        Result.success(cleanedText)
     }
 
     private fun transcribeAudio(
@@ -60,17 +63,29 @@ class AiPipelineClient(private val prefs: PreferencesManager) {
         val mediaType = "audio/m4a".toMediaType()
         val fileBody = audioFile.asRequestBody(mediaType)
 
-        val multipartBody = MultipartBody.Builder()
+        val multipartBuilder = MultipartBody.Builder()
             .setType(MultipartBody.FORM)
             .addFormDataPart("file", audioFile.name, fileBody)
             .addFormDataPart("model", provider.asrModel)
             .addFormDataPart("response_format", "json")
-            .build()
+            .addFormDataPart("temperature", "0") // Determinismo puro, azzera le allucinazioni
+
+        // Imposta la lingua (default "it" per eliminare ambiguità con altre lingue)
+        val lang = prefs.language
+        if (lang.isNotBlank() && lang != "auto") {
+            multipartBuilder.addFormDataPart("language", lang)
+        }
+
+        // Prompt priming: insegna a Whisper a preservare le lettere singole (A, B, C) e gli acronimi
+        multipartBuilder.addFormDataPart(
+            "prompt",
+            "Dettatura vocale in italiano. Lettere dell'alfabeto (A, B, C, D), acronimi, codici e punteggiatura precisa."
+        )
 
         val request = Request.Builder()
             .url("${provider.baseUrl}/audio/transcriptions")
             .addHeader("Authorization", "Bearer $apiKey")
-            .post(multipartBody)
+            .post(multipartBuilder.build())
             .build()
 
         return try {
@@ -97,7 +112,7 @@ class AiPipelineClient(private val prefs: PreferencesManager) {
         val preset = prefs.activePreset
         var systemInstruction = preset.prompt
         if (!contextText.isNullOrBlank()) {
-            systemInstruction += "\nContesto del campo di testo attuale: \"$contextText\""
+            systemInstruction += "\nContesto del testo già presente nel campo: \"$contextText\""
         }
 
         val messagesArray = JSONArray().apply {
@@ -114,7 +129,7 @@ class AiPipelineClient(private val prefs: PreferencesManager) {
         val requestPayload = JSONObject().apply {
             put("model", provider.llmModel)
             put("messages", messagesArray)
-            put("temperature", 0.2)
+            put("temperature", 0.1) // Bassa temperatura per massima fedeltà
         }
 
         val jsonMediaType = "application/json; charset=utf-8".toMediaType()
@@ -145,5 +160,23 @@ class AiPipelineClient(private val prefs: PreferencesManager) {
         } catch (e: Exception) {
             Result.failure(e)
         }
+    }
+
+    private fun sanitizeLlmOutput(output: String): String {
+        var clean = output.trim()
+        val prefixesToRemove = listOf(
+            "Message:", "Message :", "Messaggio:", "Messaggio :",
+            "Testo:", "Testo :", "Trascrizione:", "Output:"
+        )
+        for (prefix in prefixesToRemove) {
+            if (clean.startsWith(prefix, ignoreCase = true)) {
+                clean = clean.substring(prefix.length).trim()
+            }
+        }
+        // Rimuove eventuali virgolette all'inizio e alla fine
+        if (clean.startsWith("\"") && clean.endsWith("\"") && clean.length > 1) {
+            clean = clean.substring(1, clean.length - 1).trim()
+        }
+        return clean
     }
 }

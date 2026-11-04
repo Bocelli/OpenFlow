@@ -6,6 +6,7 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
+import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -48,7 +49,6 @@ class FlowAccessibilityService : AccessibilityService() {
         super.onServiceConnected()
         Log.d(TAG, "FlowAccessibilityService onServiceConnected!")
 
-        // Configurazione dinamica per intercettare tutti gli eventi finestra e input
         serviceInfo = AccessibilityServiceInfo().apply {
             eventTypes = AccessibilityEvent.TYPES_ALL_MASK
             feedbackType = AccessibilityServiceInfo.FEEDBACK_GENERIC
@@ -59,7 +59,6 @@ class FlowAccessibilityService : AccessibilityService() {
 
         initBubbleOverlay()
 
-        // Mostra la bolla se l'utente ha scelto di averla sempre attiva o al primo avvio
         if (!prefs.showOnlyWhenFocused) {
             bubbleOverlay?.show()
         }
@@ -111,7 +110,8 @@ class FlowAccessibilityService : AccessibilityService() {
                 try {
                     activeTargetNode?.recycle()
                     activeTargetNode = AccessibilityNodeInfo.obtain(target)
-                    currentContextText = target.text?.toString()
+                    // Estrae il testo reale ignorando il placeholder/hint di WhatsApp ("Message")
+                    currentContextText = getSanitizedFieldText(target).ifBlank { null }
                 } catch (_: Exception) {}
             }
 
@@ -172,11 +172,12 @@ class FlowAccessibilityService : AccessibilityService() {
             return
         }
 
-        val existingText = target.text?.toString() ?: ""
-        val finalText = if (existingText.isNotBlank() && !existingText.endsWith(" ")) {
-            "$existingText $newText"
+        // Filtra via l'eventuale hint placeholder prima di concatenare
+        val existingText = getSanitizedFieldText(target)
+        val finalText = if (existingText.isNotBlank()) {
+            if (existingText.endsWith(" ")) "$existingText$newText" else "$existingText $newText"
         } else {
-            "$existingText$newText"
+            newText
         }
 
         val arguments = Bundle().apply {
@@ -190,6 +191,36 @@ class FlowAccessibilityService : AccessibilityService() {
             copyToClipboard(newText)
             target.performAction(AccessibilityNodeInfo.ACTION_PASTE)
         }
+    }
+
+    /**
+     * Risolve il bug critico di WhatsApp/Telegram:
+     * Quando un campo è vuoto, AccessibilityNodeInfo.text spesso restituisce l'hint ("Message", "Messaggio").
+     * Questa funzione garantisce che l'hint venga riconosciuto come campo vuoto.
+     */
+    private fun getSanitizedFieldText(node: AccessibilityNodeInfo?): String {
+        if (node == null) return ""
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && node.isShowingHintText) {
+            return ""
+        }
+        val text = node.text?.toString()?.trim() ?: return ""
+        val hint = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) node.hintText?.toString()?.trim() else null
+        if (!hint.isNullOrEmpty() && text.equals(hint, ignoreCase = true)) {
+            return ""
+        }
+
+        // Riconoscimento placeholder noti
+        val lower = text.lowercase()
+        val placeholderKeywords = listOf(
+            "message", "messaggio", "scrivi un messaggio", "scrivi un messaggio...",
+            "type a message", "type a message...", "cerca o digita...", "text message",
+            "invia un messaggio", "send message"
+        )
+        if (placeholderKeywords.any { lower == it }) {
+            return ""
+        }
+
+        return text
     }
 
     private fun copyToClipboard(text: String) {

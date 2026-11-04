@@ -12,6 +12,9 @@
   - Completed conceptual map and architectural blueprint in `trail_audit_and_architecture.md`.
   - Conducted UI interview: selected auto-popup bubble on focus, hybrid tap/push-to-talk, and Wispr Dark aesthetic.
   - Successfully configured standalone Android CLI SDK & Gradle 8.7.
+  - Resolved WhatsApp/Telegram placeholder bug: sanitized field hints ("Message") preventing prepending ghost text.
+  - Upgraded audio capture to VOICE_RECOGNITION DSP and 64kbps AAC for phonetic clarity.
+  - Added Whisper prompt priming, deterministic temperature 0, and explicit language parameter ("it") to prevent spelling hallucinations like "a bici".
   - Compiled and verified debug APK: `app-debug.apk` (16.3 MB) ready for deployment.
   - Implemented core Android architecture:
     - `data/PreferencesManager.kt`: EncryptedSharedPreferences, OpenAI & Groq endpoints, prompt presets.

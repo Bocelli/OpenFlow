@@ -100,6 +100,7 @@ fun MainSettingsScreen(prefs: PreferencesManager) {
     var activeProvider by remember { mutableStateOf(prefs.activeProvider) }
     var openAiKey by remember { mutableStateOf(prefs.openAiKey) }
     var groqKey by remember { mutableStateOf(prefs.groqKey) }
+    var selectedLanguage by remember { mutableStateOf(prefs.language) }
     var activePreset by remember { mutableStateOf(prefs.activePreset) }
     var showOnlyWhenFocused by remember { mutableStateOf(prefs.showOnlyWhenFocused) }
     var hapticEnabled by remember { mutableStateOf(prefs.hapticFeedbackEnabled) }
@@ -328,6 +329,41 @@ fun MainSettingsScreen(prefs: PreferencesManager) {
                             ),
                             shape = RoundedCornerShape(12.dp)
                         )
+
+                        Spacer(modifier = Modifier.height(14.dp))
+                        Text(
+                            text = "Lingua dettatura Whisper (fissa la lingua per evitare allucinazioni):",
+                            fontSize = 12.sp,
+                            color = FlowTextSecondary,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            val languages = listOf("it" to "🇮🇹 Italiano", "en" to "🇬🇧 English", "auto" to "🌐 Auto")
+                            languages.forEach { (code, label) ->
+                                val isSel = selectedLanguage == code
+                                Box(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(if (isSel) FlowViolet.copy(alpha = 0.25f) else FlowSurfaceElevated)
+                                        .border(1.dp, if (isSel) FlowViolet else FlowBorder, RoundedCornerShape(8.dp))
+                                        .clickable {
+                                            selectedLanguage = code
+                                            prefs.language = code
+                                        }
+                                        .padding(vertical = 8.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = label,
+                                        fontSize = 12.sp,
+                                        fontWeight = if (isSel) FontWeight.Bold else FontWeight.Normal,
+                                        color = if (isSel) FlowTextPrimary else FlowTextSecondary
+                                    )
+                                }
+                            }
+                        }
 
                         Spacer(modifier = Modifier.height(10.dp))
                         Text(

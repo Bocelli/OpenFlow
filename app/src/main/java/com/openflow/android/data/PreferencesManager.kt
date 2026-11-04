@@ -23,34 +23,37 @@ enum class ApiProvider(val displayName: String, val baseUrl: String, val asrMode
 enum class PromptPreset(val title: String, val description: String, val prompt: String) {
     NATURAL(
         title = "Naturale & Fluido (Wispr Standard)",
-        description = "Rimuove intercalari (ehm, cioè), autocorrezioni e sistema la punteggiatura.",
+        description = "Rimuove intercalari (ehm, cioè), autocorrezioni e sistema la punteggiatura con fedeltà fonetica.",
         prompt = """
-            Sei l'assistente di dettatura intelligente OpenFlow. Il tuo compito è trasformare il testo trascritto dal parlato in un testo scritto perfetto, naturale e fluido.
-            Regole tassative:
-            1. Rimuovi tutti gli intercalari, esitazioni e ripetizioni (es: "ehm", "uh", "cioè", "tipo", "allora", "praticamente").
+            Sei l'assistente di dettatura intelligente OpenFlow. Il tuo compito è trasformare la trascrizione del parlato in un testo scritto pulito, naturale e fedele al 100%.
+            
+            REGOLE TASSATIVE:
+            1. Rimuovi solo veri intercalari ed esitazioni (es: "ehm", "uh", "tipo", "allora", "praticamente").
             2. Risolvi le autocorrezioni del parlante: se dice "ci vediamo alle 3, no anzi alle 4", scrivi solo "Ci vediamo alle 4.".
-            3. Applica corretta punteggiatura, maiuscole e spaziatura.
-            4. Mantieni la lingua originale usata dall'utente.
-            5. NON aggiungere commenti, risposte o spiegazioni: restituisci ESCLUSIVAMENTE il testo finale pulito.
+            3. FEDELTÀ ASSOLUTA: NON inventare, alterare o sostituire le parole dettate. Se l'utente detta lettere singole, spelling o acronimi (es. "A B C", "PDF", "IBAN", "SMS"), mantienile ESATTAMENTE come lettere o acronimi separati (es. "A B C" non deve MAI diventare "a bici"!).
+            4. Se l'utente ha dettato solo una lettera o una parola breve, non allungarla e non modificarla.
+            5. Mantieni la lingua originale dell'utente con punteggiatura corretta e naturale.
+            6. NON aggiungere MAI prefissi, commenti o virgolette (NON scrivere "Message:", "Testo:", "Risposta:", ecc.). Restituisci ESCLUSIVAMENTE il testo finale da digitare.
         """.trimIndent()
     ),
     PROFESSIONAL(
         title = "Professionale / Email",
-        description = "Tono formale, curato e pronto per email o messaggi di lavoro.",
+        description = "Tono formale, curato e pronto per email o comunicazioni di lavoro.",
         prompt = """
             Sei un assistente di scrittura professionale per email e comunicazioni aziendali.
-            Trasforma la trascrizione vocale in un messaggio chiaro, cortese, ben strutturato e con registro formale ma moderno.
+            Trasforma la trascrizione vocale in un messaggio chiaro, cortese e ben strutturato con registro formale ma contemporaneo.
             Rimuovi intercalari, correggi refusi e struttura in paragrafi puliti se opportuno.
-            Restituisci ESCLUSIVAMENTE il testo finale da inviare.
+            Preserva rigorosamente acronimi, codici e nomi propri.
+            NON aggiungere prefissi o spiegazioni: restituisci ESCLUSIVAMENTE il testo finale da inviare.
         """.trimIndent()
     ),
     BULLETS(
         title = "Appunti & Elenchi Puntati",
         description = "Organizza il parlato in punti chiave chiari e leggibili.",
         prompt = """
-            Riorganizza il discorso trascritto in un elenco puntato chiaro, conciso e ben leggibile (bullet points).
+            Riorganizza il discorso trascritto in un elenco puntato chiaro, conciso e leggibile (bullet points).
             Estrai i punti salienti eliminando ridondanze e intercalari.
-            Restituisci ESCLUSIVAMENTE l'elenco finale.
+            Restituisci ESCLUSIVAMENTE l'elenco finale senza prefazioni.
         """.trimIndent()
     ),
     AI_PROMPT(
@@ -101,6 +104,10 @@ class PreferencesManager(context: Context) {
         }
         set(value) = prefs.edit().putString(KEY_ACTIVE_PRESET, value.name).apply()
 
+    var language: String
+        get() = prefs.getString(KEY_LANGUAGE, "it") ?: "it"
+        set(value) = prefs.edit().putString(KEY_LANGUAGE, value).apply()
+
     var showOnlyWhenFocused: Boolean
         get() = prefs.getBoolean(KEY_SHOW_ONLY_WHEN_FOCUSED, true)
         set(value) = prefs.edit().putBoolean(KEY_SHOW_ONLY_WHEN_FOCUSED, value).apply()
@@ -122,6 +129,7 @@ class PreferencesManager(context: Context) {
         private const val KEY_GROQ_KEY = "key_groq_token"
         private const val KEY_ACTIVE_PROVIDER = "key_active_provider"
         private const val KEY_ACTIVE_PRESET = "key_active_preset"
+        private const val KEY_LANGUAGE = "key_language"
         private const val KEY_SHOW_ONLY_WHEN_FOCUSED = "key_show_focused"
         private const val KEY_HAPTIC_ENABLED = "key_haptic_feedback"
     }

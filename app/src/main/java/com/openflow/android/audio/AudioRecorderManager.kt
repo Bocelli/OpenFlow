@@ -32,11 +32,16 @@ class AudioRecorderManager(private val context: Context) {
 
         return try {
             recorder.apply {
-                setAudioSource(MediaRecorder.AudioSource.MIC)
+                // VOICE_RECOGNITION attiva il DSP hardware di cancellazione rumore ed eco
+                try {
+                    setAudioSource(MediaRecorder.AudioSource.VOICE_RECOGNITION)
+                } catch (e: Exception) {
+                    setAudioSource(MediaRecorder.AudioSource.MIC)
+                }
                 setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
                 setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
-                setAudioSamplingRate(16000) // 16kHz ottimale per Whisper
-                setAudioEncodingBitRate(32000) // compatto e velocissimo da inviare via rete
+                setAudioSamplingRate(16000) // 16kHz nativo per i modelli Whisper
+                setAudioEncodingBitRate(64000) // 64kbps per preservare la chiarezza fonetica (lettere e consonanti)
                 setAudioChannels(1) // Mono
                 setOutputFile(audioFile.absolutePath)
                 prepare()
@@ -52,9 +57,6 @@ class AudioRecorderManager(private val context: Context) {
         }
     }
 
-    /**
-     * Restituisce l'ampiezza istantanea (0..32767) per animare la waveform in tempo reale
-     */
     fun getMaxAmplitude(): Int {
         return try {
             if (isRecording) mediaRecorder?.maxAmplitude ?: 0 else 0
