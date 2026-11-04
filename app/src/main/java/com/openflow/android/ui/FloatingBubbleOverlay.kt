@@ -117,6 +117,32 @@ class FloatingBubbleOverlay(
         return (dp * density + 0.5f).toInt()
     }
 
+    /**
+     * Calcola dinamicamente l'offset verticale del notch su qualsiasi smartphone Android (Samsung One UI, Pixel, HyperOS).
+     * Interroga le WindowMetrics di sistema per ottenere l'altezza reale della status bar (es. 40dp su S25 Ultra, 48dp su POCO, 52dp su Pixel)
+     * e centra la capsula esattamente a metà altezza dove risiede il sensore della fotocamera frontale.
+     */
+    private fun getAutoTopOffsetDp(): Float {
+        return try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                val insets = windowManager.currentWindowMetrics.windowInsets
+                val statusBarHeightPx = insets.getInsets(android.view.WindowInsets.Type.statusBars()).top
+                val density = context.resources.displayMetrics.density
+                if (statusBarHeightPx > 0 && density > 0f) {
+                    val statusBarHeightDp = statusBarHeightPx / density
+                    val cameraCenterYDp = statusBarHeightDp / 2f
+                    (cameraCenterYDp - (IDLE_HEIGHT_DP / 2f) + 1.0f).coerceAtLeast(0f)
+                } else {
+                    TOP_OFFSET_DP
+                }
+            } else {
+                TOP_OFFSET_DP
+            }
+        } catch (_: Exception) {
+            TOP_OFFSET_DP
+        }
+    }
+
     fun show(force: Boolean = false, fromTyping: Boolean = false) {
         fadeAnimator?.cancel()
         if (!isViewAttached) {
@@ -132,7 +158,7 @@ class FloatingBubbleOverlay(
         view.scaleY = 1f
 
         params.x = dpToPx(prefs.notchOffsetX)
-        params.y = dpToPx(TOP_OFFSET_DP + prefs.notchOffsetY)
+        params.y = dpToPx(getAutoTopOffsetDp() + prefs.notchOffsetY)
         params.flags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
                 WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
                 WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
@@ -214,7 +240,7 @@ class FloatingBubbleOverlay(
         ).apply {
             gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL
             x = dpToPx(prefs.notchOffsetX)
-            y = dpToPx(TOP_OFFSET_DP + prefs.notchOffsetY)
+            y = dpToPx(getAutoTopOffsetDp() + prefs.notchOffsetY)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
                 layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS
             }
@@ -277,7 +303,7 @@ class FloatingBubbleOverlay(
         val params = layoutParams ?: return
         val view = bubbleView ?: return
         params.x = dpToPx(prefs.notchOffsetX)
-        params.y = dpToPx(TOP_OFFSET_DP + prefs.notchOffsetY)
+        params.y = dpToPx(getAutoTopOffsetDp() + prefs.notchOffsetY)
         try {
             windowManager.updateViewLayout(view, params)
         } catch (_: Exception) {}
@@ -382,7 +408,7 @@ class FloatingBubbleOverlay(
                 params.width = w
                 params.height = h
                 params.x = dpToPx(prefs.notchOffsetX)
-                params.y = dpToPx(TOP_OFFSET_DP + prefs.notchOffsetY)
+                params.y = dpToPx(getAutoTopOffsetDp() + prefs.notchOffsetY)
                 try {
                     windowManager.updateViewLayout(view, params)
                 } catch (_: Exception) {}
