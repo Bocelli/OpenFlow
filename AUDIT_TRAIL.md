@@ -40,6 +40,16 @@
     - Fixed JSON parser bug: if choices were missing, it previously returned `Result.success(rawText)`, which tricked the pipeline into thinking the call succeeded and prevented fallback.
     - Removed `contextText` pollution from system prompt to stop confusing Llama with prior draft text.
     - Added explicit in-field diagnostic prefix on fallback so any API failure is immediately visible.
+  - Calibrated Paragraph Density to Wispr Flow Gold Standard:
+    - Analyzed user complaint & real Wispr Flow transcript: the engine was going to a new line (`\n\n`) too frequently, fragmenting thoughts into 1-sentence micro-paragraphs.
+    - Root cause: previous Rule 1 contained strict `NON lasciare MAI un unico blocco continuo di testo se supera le 25 parole`, which forced models to break every ~1.5 sentences.
+    - Removed the 25-word constraint and redefined Rule 1 (Struttura dei Paragrafi Stile Wispr Flow):
+      - Mandates cohesive thematic blocks (35-70 words per paragraph, with 2-4 connected sentences).
+      - Strict prohibition against 1-sentence or 10-25 word isolated micro-paragraphs.
+      - Keeps concluding thoughts ("Vediamo come va", "Boh onestamente...") attached to their parent paragraph.
+    - Embedded the user's exact Wispr Flow PC upgrade transcription as canonical Few-Shot reference.
+    - Updated Gemini multimodal system instructions to group into cohesive paragraphs without splitting every sentence.
+    - Verified compilation & tests passed: new APK `OpenFlow-debug.apk` (16.4 MB).
   - Punctuation Rhythm, Tech Brand Orthography, and Oral Starter Removal:
     - Analyzed user transcript tests from Groq and Gemini: both engines produced structured paragraphs with quotes and fast latency, but showed minor punctuation run-ons, coordinating conjunction starters ("E praticamente..."), and brand spelling errors ("Grok" vs "Groq", "Open AI" vs "OpenAI", "Flash Light" vs "Flash-Lite").
     - Updated `PromptPreset.NATURAL` system prompt with:
