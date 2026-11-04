@@ -68,7 +68,7 @@ class FloatingBubbleOverlay(
         private set
 
     private var currentWidthPx = dpToPx(IDLE_WIDTH_DP)
-    private var currentHeightPx = dpToPx(IDLE_HEIGHT_DP)
+    private var currentHeightPx = dpToPx(PILL_HEIGHT_DP)
 
     // Touch & Gesture Tracking
     private var initialTouchY = 0f
@@ -131,7 +131,7 @@ class FloatingBubbleOverlay(
                 if (statusBarHeightPx > 0 && density > 0f) {
                     val statusBarHeightDp = statusBarHeightPx / density
                     val cameraCenterYDp = statusBarHeightDp / 2f
-                    (cameraCenterYDp - (IDLE_HEIGHT_DP / 2f) + 1.0f).coerceAtLeast(0f)
+                    (cameraCenterYDp - (PILL_HEIGHT_DP / 2f) + 2.5f).coerceAtLeast(0f)
                 } else {
                     TOP_OFFSET_DP
                 }
@@ -340,21 +340,21 @@ class FloatingBubbleOverlay(
                 handler.removeCallbacks(stealthDimRunnable)
                 bubbleView?.alpha = 1f
                 vibrate(35)
-                animateToSize(RECORDING_WIDTH_DP, RECORDING_HEIGHT_DP)
+                animateToSize(RECORDING_WIDTH_DP, PILL_HEIGHT_DP)
                 handler.post(amplitudePollingRunnable)
             }
             BubbleState.PROCESSING -> {
                 handler.removeCallbacks(stealthDimRunnable)
                 bubbleView?.alpha = 1f
                 handler.removeCallbacks(amplitudePollingRunnable)
-                animateToSize(PROCESSING_WIDTH_DP, RECORDING_HEIGHT_DP)
+                animateToSize(PROCESSING_WIDTH_DP, PILL_HEIGHT_DP)
             }
             BubbleState.SUCCESS -> {
                 handler.removeCallbacks(stealthDimRunnable)
                 bubbleView?.alpha = 1f
                 vibrate(50)
                 handler.removeCallbacks(amplitudePollingRunnable)
-                animateToSize(SUCCESS_WIDTH_DP, RECORDING_HEIGHT_DP)
+                animateToSize(SUCCESS_WIDTH_DP, PILL_HEIGHT_DP)
                 handler.postDelayed({
                     updateState(BubbleState.IDLE)
                     if (prefs.showOnlyWhenFocused) {
@@ -367,7 +367,7 @@ class FloatingBubbleOverlay(
                 bubbleView?.alpha = 1f
                 vibrate(90)
                 handler.removeCallbacks(amplitudePollingRunnable)
-                animateToSize(SUCCESS_WIDTH_DP, RECORDING_HEIGHT_DP)
+                animateToSize(ERROR_WIDTH_DP, PILL_HEIGHT_DP)
                 handler.postDelayed({
                     updateState(BubbleState.IDLE)
                     if (prefs.showOnlyWhenFocused) {
@@ -377,7 +377,7 @@ class FloatingBubbleOverlay(
             }
             BubbleState.IDLE -> {
                 handler.removeCallbacks(amplitudePollingRunnable)
-                animateToSize(IDLE_WIDTH_DP, IDLE_HEIGHT_DP)
+                animateToSize(IDLE_WIDTH_DP, PILL_HEIGHT_DP)
                 scheduleStealth()
             }
         }
@@ -605,13 +605,19 @@ class FloatingBubbleOverlay(
         private val statusTextPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             textSize = dpToPx(12f).toFloat()
             typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            textAlign = Paint.Align.LEFT
+        }
+
+        private val iconPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            textSize = dpToPx(13f).toFloat()
+            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
             textAlign = Paint.Align.CENTER
         }
 
         private val spinnerPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = Color.parseColor("#38BDF8")
             style = Paint.Style.STROKE
-            strokeWidth = dpToPx(2f).toFloat()
+            strokeWidth = dpToPx(2.2f).toFloat()
             strokeCap = Paint.Cap.ROUND
         }
 
@@ -735,6 +741,7 @@ class FloatingBubbleOverlay(
                             PromptPreset.PROFESSIONAL -> Color.parseColor("#E4E4E7")
                             PromptPreset.BULLETS -> Color.parseColor("#F59E0B")
                         }
+                        statusTextPaint.textAlign = Paint.Align.CENTER
                         statusTextPaint.color = accentColor
                         statusTextPaint.textSize = dpToPx(10f).toFloat()
                         canvas.drawText(label, cx, cy + dpToPx(3.5f), statusTextPaint)
@@ -749,24 +756,33 @@ class FloatingBubbleOverlay(
                                 PromptPreset.BULLETS -> Color.parseColor("#F59E0B")
                             }
                         }
-                        canvas.drawCircle(cx, cy + dpToPx(9f), dpToPx(1.6f).toFloat(), dotPaint)
+                        canvas.drawCircle(cx, cy + dpToPx(9.5f), dpToPx(1.6f).toFloat(), dotPaint)
                     }
                 }
 
                 BubbleState.RECORDING -> {
                     if (isCancelCandidate) {
+                        // Ala Sinistra: Icona annullamento
+                        iconPaint.color = Color.parseColor("#EF4444")
+                        iconPaint.textSize = dpToPx(13f).toFloat()
+                        canvas.drawText("✕", cx - dpToPx(44f), cy + dpToPx(4.5f), iconPaint)
+
+                        // Centro [cx - 18dp, cx + 18dp]: fotocamera libera e intatta
+
+                        // Ala Destra: Etichetta annulla
+                        statusTextPaint.textAlign = Paint.Align.LEFT
                         statusTextPaint.color = Color.parseColor("#EF4444")
-                        statusTextPaint.textSize = dpToPx(11f).toFloat()
-                        canvas.drawText("✕ ANNULLA", cx, cy + dpToPx(4f), statusTextPaint)
+                        statusTextPaint.textSize = dpToPx(12f).toFloat()
+                        canvas.drawText("Annulla", cx + dpToPx(24f), cy + dpToPx(4.2f), statusTextPaint)
                     } else {
-                        // A sinistra della fotocamera (cx - 24dp indietro): Equalizzatore a 5 barre
-                        val waveStartX = dpToPx(14f).toFloat()
-                        val waveEndX = cx - dpToPx(20f)
+                        // Ala Sinistra: Equalizzatore vocale a 5 barre
+                        val waveStartX = cx - dpToPx(68f)
+                        val waveEndX = cx - dpToPx(24f)
                         val availableW = waveEndX - waveStartX
                         val numBars = 5
                         val barWidth = dpToPx(2.8f).toFloat()
                         val step = (availableW - barWidth) / (numBars - 1).coerceAtLeast(1).toFloat()
-                        val maxBarHeight = h * 0.46f
+                        val maxBarHeight = h * 0.48f
 
                         for (i in 0 until numBars) {
                             val bx = waveStartX + i * step + barWidth / 2f
@@ -784,10 +800,10 @@ class FloatingBubbleOverlay(
                             canvas.drawRoundRect(barRect, 3f, 3f, wavePaint)
                         }
 
-                        // Al centro: il foro della fotocamera (lasciato pulito e nero)
+                        // Centro [cx - 18dp, cx + 18dp]: Safe Zone del Punch Hole fotocamera (nero assoluto)
 
-                        // A destra della fotocamera (cx + 20dp in avanti): Dot REC + Timer digitale
-                        val recDotX = cx + dpToPx(24f)
+                        // Ala Destra: Dot REC pulsante + Timer digitale
+                        val recDotX = cx + dpToPx(25f)
                         val recDotR = dpToPx(3.2f).toFloat()
                         recDotPaint.color = Color.argb((150 + 105 * pulse).toInt(), 239, 68, 68)
                         canvas.drawCircle(recDotX, cy, recDotR, recDotPaint)
@@ -796,35 +812,59 @@ class FloatingBubbleOverlay(
                         val mm = elapsedSec / 60
                         val ss = elapsedSec % 60
                         val timeStr = String.format(Locale.US, "%02d:%02d", mm, ss)
-                        canvas.drawText(timeStr, recDotX + dpToPx(6f), cy + dpToPx(4.2f), timerTextPaint)
+                        canvas.drawText(timeStr, recDotX + dpToPx(7f), cy + dpToPx(4.2f), timerTextPaint)
                     }
                 }
 
                 BubbleState.PROCESSING -> {
-                    // Spinner rotante + etichetta
-                    val spinnerR = dpToPx(7f).toFloat()
-                    val spinnerX = cx - dpToPx(40f)
+                    // Ala Sinistra: Spinner ciano neon rotante ad arco
+                    val spinnerR = dpToPx(7.5f).toFloat()
+                    val spinnerX = cx - dpToPx(44f)
                     val sweepRect = RectF(spinnerX - spinnerR, cy - spinnerR, spinnerX + spinnerR, cy + spinnerR)
                     canvas.save()
                     canvas.rotate(spinnerAngle, spinnerX, cy)
-                    canvas.drawArc(sweepRect, 0f, 260f, false, spinnerPaint)
+                    spinnerPaint.color = Color.parseColor("#38BDF8")
+                    spinnerPaint.strokeWidth = dpToPx(2.2f).toFloat()
+                    canvas.drawArc(sweepRect, 0f, 270f, false, spinnerPaint)
                     canvas.restore()
 
-                    statusTextPaint.textSize = dpToPx(11f).toFloat()
+                    // Centro [cx - 18dp, cx + 18dp]: Safe Zone del Punch Hole fotocamera (completamente sgombra)
+
+                    // Ala Destra: Testo "Trascrizione..." allineato rigorosamente a sinistra da cx + 24dp
+                    statusTextPaint.textAlign = Paint.Align.LEFT
+                    statusTextPaint.textSize = dpToPx(12f).toFloat()
                     statusTextPaint.color = Color.parseColor("#E4E4E7")
-                    canvas.drawText("Trascrizione...", cx + dpToPx(10f), cy + dpToPx(3.8f), statusTextPaint)
+                    canvas.drawText("Trascrizione...", cx + dpToPx(24f), cy + dpToPx(4.2f), statusTextPaint)
                 }
 
                 BubbleState.SUCCESS -> {
-                    statusTextPaint.textSize = dpToPx(11.5f).toFloat()
+                    // Ala Sinistra: Icona check verde smeraldo
+                    iconPaint.color = Color.parseColor("#10B981")
+                    iconPaint.textSize = dpToPx(14f).toFloat()
+                    canvas.drawText("✓", cx - dpToPx(38f), cy + dpToPx(4.5f), iconPaint)
+
+                    // Centro: Safe Zone del Punch Hole
+
+                    // Ala Destra: Testo di completamento
+                    statusTextPaint.textAlign = Paint.Align.LEFT
+                    statusTextPaint.textSize = dpToPx(12f).toFloat()
                     statusTextPaint.color = Color.parseColor("#10B981")
-                    canvas.drawText("Testo inserito ✓", cx, cy + dpToPx(4f), statusTextPaint)
+                    canvas.drawText("Inserito ✓", cx + dpToPx(22f), cy + dpToPx(4.2f), statusTextPaint)
                 }
 
                 BubbleState.ERROR -> {
-                    statusTextPaint.textSize = dpToPx(11.5f).toFloat()
+                    // Ala Sinistra: Icona errore rosso corallo
+                    iconPaint.color = Color.parseColor("#EF4444")
+                    iconPaint.textSize = dpToPx(14f).toFloat()
+                    canvas.drawText("!", cx - dpToPx(36f), cy + dpToPx(4.5f), iconPaint)
+
+                    // Centro: Safe Zone del Punch Hole
+
+                    // Ala Destra: Testo di errore
+                    statusTextPaint.textAlign = Paint.Align.LEFT
+                    statusTextPaint.textSize = dpToPx(12f).toFloat()
                     statusTextPaint.color = Color.parseColor("#EF4444")
-                    canvas.drawText("Errore ✕", cx, cy + dpToPx(4f), statusTextPaint)
+                    canvas.drawText("Errore", cx + dpToPx(22f), cy + dpToPx(4.2f), statusTextPaint)
                 }
             }
         }
@@ -832,13 +872,13 @@ class FloatingBubbleOverlay(
 
     companion object {
         private const val TAG = "NotchIslandOverlay"
-        private const val IDLE_WIDTH_DP = 38.5f
-        private const val IDLE_HEIGHT_DP = 38.5f
-        private const val RECORDING_WIDTH_DP = 216f
-        private const val RECORDING_HEIGHT_DP = 36f
-        private const val PROCESSING_WIDTH_DP = 152f
-        private const val SUCCESS_WIDTH_DP = 142f
-        private const val TOP_OFFSET_DP = 5.75f
+        private const val IDLE_WIDTH_DP = 40f
+        private const val PILL_HEIGHT_DP = 40f
+        private const val RECORDING_WIDTH_DP = 228f
+        private const val PROCESSING_WIDTH_DP = 220f
+        private const val SUCCESS_WIDTH_DP = 180f
+        private const val ERROR_WIDTH_DP = 180f
+        private const val TOP_OFFSET_DP = 6.8f
         private const val MARGIN_DP = 12f
     }
 }
