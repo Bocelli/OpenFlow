@@ -42,6 +42,12 @@ class AiPipelineClient(private val prefs: PreferencesManager) {
             return@withContext Result.success("")
         }
 
+        // Se l'utente ha selezionato "Trascrizione Pura (Zero IA)", salta l'LLM per massima velocità e fedeltà 1:1
+        if (prefs.activePreset == com.openflow.android.data.PromptPreset.RAW) {
+            val sanitized = sanitizeLlmOutput(rawTranscription)
+            return@withContext Result.success(sanitized)
+        }
+
         // 2. STADIO 2: Polishing e formattazione con LLM
         val polishedText = polishTextWithLlm(rawTranscription, surroundingContext, apiKey, provider)
             .getOrElse {
@@ -76,10 +82,10 @@ class AiPipelineClient(private val prefs: PreferencesManager) {
             multipartBuilder.addFormDataPart("language", lang)
         }
 
-        // Prompt priming: insegna a Whisper a preservare le lettere singole (A, B, C) e gli acronimi
+        // Prompt priming: insegna a Whisper a preservare le lettere singole (A B C) e i termini tecnici
         multipartBuilder.addFormDataPart(
             "prompt",
-            "Dettatura vocale in italiano. Lettere dell'alfabeto (A, B, C, D), acronimi, codici e punteggiatura precisa."
+            "Trascrizione vocale accurata. Lettere scandite: A B C, D E F. Termini tecnici: broadcast, link, email."
         )
 
         val request = Request.Builder()
@@ -177,6 +183,10 @@ class AiPipelineClient(private val prefs: PreferencesManager) {
         if (clean.startsWith("\"") && clean.endsWith("\"") && clean.length > 1) {
             clean = clean.substring(1, clean.length - 1).trim()
         }
+
+        // Correzione fonetica specifica per lo spelling delle lettere ("abici" / "a bici" -> "A B C")
+        clean = clean.replace(Regex("""\b(abici|abbiccì|a\s+bici)\b""", RegexOption.IGNORE_CASE), "A B C")
+
         return clean
     }
 }

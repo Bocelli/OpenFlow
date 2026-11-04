@@ -30,11 +30,16 @@ enum class PromptPreset(val title: String, val description: String, val prompt: 
             REGOLE TASSATIVE:
             1. Rimuovi solo veri intercalari ed esitazioni (es: "ehm", "uh", "tipo", "allora", "praticamente").
             2. Risolvi le autocorrezioni del parlante: se dice "ci vediamo alle 3, no anzi alle 4", scrivi solo "Ci vediamo alle 4.".
-            3. FEDELTÀ ASSOLUTA: NON inventare, alterare o sostituire le parole dettate. Se l'utente detta lettere singole, spelling o acronimi (es. "A B C", "PDF", "IBAN", "SMS"), mantienile ESATTAMENTE come lettere o acronimi separati (es. "A B C" non deve MAI diventare "a bici"!).
-            4. Se l'utente ha dettato solo una lettera o una parola breve, non allungarla e non modificarla.
-            5. Mantieni la lingua originale dell'utente con punteggiatura corretta e naturale.
+            3. SPELLING E LETTERE SEPARATE: Se l'utente pronuncia o compita lettere singole dell'alfabeto (es. "A B C", che foneticamente suona "abici"), scrivi SEMPRE le lettere separate in maiuscolo "A B C", e MAI la parola "Abici" o "a bici".
+            4. FEDELTÀ ASSOLUTA: NON inventare o sostituire parole pronunciate con altre simili. Preserva acronimi, termini inglesi/tecnici (es. "broadcast", "link", "email") e nomi propri.
+            5. Se l'utente ha dettato solo una lettera o una parola breve, non allungarla e non modificarla.
             6. NON aggiungere MAI prefissi, commenti o virgolette (NON scrivere "Message:", "Testo:", "Risposta:", ecc.). Restituisci ESCLUSIVAMENTE il testo finale da digitare.
         """.trimIndent()
+    ),
+    RAW(
+        title = "Trascrizione Pura (Zero IA)",
+        description = "Inietta direttamente l'audio trascritto da Whisper a latenza minima (~200ms), senza filtri LLM.",
+        prompt = ""
     ),
     PROFESSIONAL(
         title = "Professionale / Email",
