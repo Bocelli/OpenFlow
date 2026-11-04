@@ -2,6 +2,7 @@ package com.openflow.android.ui
 
 import android.Manifest
 import android.accessibilityservice.AccessibilityServiceInfo
+import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -14,9 +15,20 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
@@ -28,8 +40,8 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -42,16 +54,18 @@ import com.openflow.android.data.PreferencesManager
 import com.openflow.android.data.PromptPreset
 import com.openflow.android.service.FlowAccessibilityService
 
-// Wispr Dark Color Palette
-val FlowBlack = Color(0xFF0B0B0E)
-val FlowSurface = Color(0xFF141419)
-val FlowSurfaceElevated = Color(0xFF1C1C24)
-val FlowBorder = Color(0xFF272734)
-val FlowViolet = Color(0xFF7C3AED)
-val FlowVioletLight = Color(0xFFA855F7)
-val FlowEmerald = Color(0xFF10B981)
-val FlowTextPrimary = Color(0xFFF9FAFB)
-val FlowTextSecondary = Color(0xFF9CA3AF)
+// Swiss Minimalist & Modern Technical Dark Palette (Anti-Slop)
+val CanvasBg = Color(0xFF0C0D0F)
+val CardBg = Color(0xFF141519)
+val CardElevated = Color(0xFF1B1C22)
+val CardHighlight = Color(0xFF242630)
+val HairlineBorder = Color(0xFF23252E)
+val HairlineBorderFocus = Color(0xFF3E4150)
+val TextPrimary = Color(0xFFF1F1F3)
+val TextSecondary = Color(0xFF8F919C)
+val TextMuted = Color(0xFF5A5C66)
+val StatusEmerald = Color(0xFF10B981)
+val StatusAmber = Color(0xFFF59E0B)
 
 class MainActivity : ComponentActivity() {
 
@@ -78,12 +92,12 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun OpenFlowTheme(content: @Composable () -> Unit) {
     val darkColors = darkColorScheme(
-        background = FlowBlack,
-        surface = FlowSurface,
-        primary = FlowViolet,
-        secondary = FlowEmerald,
-        onBackground = FlowTextPrimary,
-        onSurface = FlowTextPrimary
+        background = CanvasBg,
+        surface = CardBg,
+        primary = TextPrimary,
+        secondary = StatusEmerald,
+        onBackground = TextPrimary,
+        onSurface = TextPrimary
     )
     MaterialTheme(colorScheme = darkColors, content = content)
 }
@@ -92,6 +106,7 @@ fun OpenFlowTheme(content: @Composable () -> Unit) {
 @Composable
 fun MainSettingsScreen(prefs: PreferencesManager, resumeTrigger: Int = 0) {
     val context = LocalContext.current
+    val clipboard = remember { context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager }
 
     var hasMicPermission by remember {
         mutableStateOf(ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED)
@@ -129,45 +144,78 @@ fun MainSettingsScreen(prefs: PreferencesManager, resumeTrigger: Int = 0) {
     }
 
     Scaffold(
-        containerColor = FlowBlack,
+        containerColor = CanvasBg,
         topBar = {
             TopAppBar(
                 title = {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Box(
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(end = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(
+                                modifier = Modifier
+                                    .size(34.dp)
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .background(CardHighlight)
+                                    .border(1.dp, HairlineBorder, RoundedCornerShape(10.dp)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Mic,
+                                    contentDescription = null,
+                                    tint = TextPrimary,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Column {
+                                Text(
+                                    text = "OpenFlow",
+                                    fontSize = 17.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = TextPrimary,
+                                    letterSpacing = (-0.3).sp
+                                )
+                                Text(
+                                    text = "Wispr Voice Engine",
+                                    fontSize = 11.sp,
+                                    color = TextMuted
+                                )
+                            }
+                        }
+
+                        // Status Badge in Top Bar
+                        val isFullyConfigured = hasAccessibilityPermission && hasMicPermission
+                        val statusBg = if (isFullyConfigured) StatusEmerald.copy(alpha = 0.12f) else StatusAmber.copy(alpha = 0.12f)
+                        val statusText = if (isFullyConfigured) StatusEmerald else StatusAmber
+
+                        Row(
                             modifier = Modifier
-                                .size(32.dp)
-                                .clip(CircleShape)
-                                .background(Brush.linearGradient(listOf(FlowViolet, FlowVioletLight))),
-                            contentAlignment = Alignment.Center
+                                .clip(RoundedCornerShape(20.dp))
+                                .background(statusBg)
+                                .border(1.dp, statusText.copy(alpha = 0.25f), RoundedCornerShape(20.dp))
+                                .padding(horizontal = 9.dp, vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Icon(
-                                imageVector = Icons.Default.Mic,
-                                contentDescription = null,
-                                tint = Color.White,
-                                modifier = Modifier.size(18.dp)
+                            Box(
+                                modifier = Modifier
+                                    .size(6.dp)
+                                    .clip(CircleShape)
+                                    .background(statusText)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = if (isFullyConfigured) "Pronto" else "Permessi",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = statusText
                             )
                         }
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Text(
-                            text = "OpenFlow",
-                            fontSize = 20.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = FlowTextPrimary
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = "BYOK Free",
-                            fontSize = 11.sp,
-                            color = FlowEmerald,
-                            fontWeight = FontWeight.SemiBold,
-                            modifier = Modifier
-                                .border(1.dp, FlowEmerald.copy(alpha = 0.4f), RoundedCornerShape(4.dp))
-                                .padding(horizontal = 6.dp, vertical = 2.dp)
-                        )
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = FlowBlack)
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = CanvasBg)
             )
         }
     ) { padding ->
@@ -175,42 +223,52 @@ fun MainSettingsScreen(prefs: PreferencesManager, resumeTrigger: Int = 0) {
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .padding(horizontal = 18.dp),
-            verticalArrangement = Arrangement.spacedBy(18.dp)
+                .padding(horizontal = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            // Sezione Test Immediato Bollicina
+            // 1. Action Card: Test Bolla & Trigger
             item {
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(containerColor = FlowSurfaceElevated),
-                    border = CardDefaults.outlinedCardBorder().copy(brush = Brush.horizontalGradient(listOf(FlowViolet, FlowVioletLight))),
-                    shape = RoundedCornerShape(16.dp)
+                TactileCard(
+                    modifier = Modifier.fillMaxWidth()
                 ) {
-                    Column(modifier = Modifier.padding(16.dp)) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.PlayArrow, contentDescription = null, tint = FlowEmerald, modifier = Modifier.size(24.dp))
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text("Prova la Bolla Wispr Dark", fontWeight = FontWeight.Bold, color = FlowTextPrimary, fontSize = 16.sp)
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Bolla Fluttuante",
+                                fontWeight = FontWeight.SemiBold,
+                                color = TextPrimary,
+                                fontSize = 15.sp
+                            )
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                text = if (FlowAccessibilityService.instance != null)
+                                    "Servizio connesso. Tocca per mostrare la bolla."
+                                else
+                                    "Disconnesso. Tocca per riavviare il servizio.",
+                                color = TextSecondary,
+                                fontSize = 12.sp,
+                                lineHeight = 16.sp
+                            )
                         }
-                        Spacer(modifier = Modifier.height(6.dp))
-                        Text(
-                            text = "Tocca il pulsante qui sotto per far apparire istantaneamente la bollicina fluttuante sul tuo schermo e testare microfono e animazioni.",
-                            color = FlowTextSecondary,
-                            fontSize = 13.sp
-                        )
-                        Spacer(modifier = Modifier.height(12.dp))
-                        Button(
+                        Spacer(modifier = Modifier.width(12.dp))
+
+                        TactileButton(
+                            text = "Mostra Ora",
                             onClick = {
                                 val service = FlowAccessibilityService.instance
                                 if (service != null) {
                                     service.triggerShowBubble()
-                                    Toast.makeText(context, "Bollicina mostrata sul bordo dello schermo! ✨", Toast.LENGTH_SHORT).show()
+                                    Toast.makeText(context, "Bolla attiva a schermo ✨", Toast.LENGTH_SHORT).show()
                                 } else {
-                                    // Dopo un aggiornamento APK, Android disconnette temporaneamente i servizi di accessibilità.
-                                    // Invitiamo l'utente a fare il rapido toggle (Off/On) nelle impostazioni.
                                     Toast.makeText(
                                         context,
-                                        "⚠️ Servizio disconnesso dall'aggiornamento. Disattiva e riattiva 'OpenFlow' in Accessibilità per riavviare!",
+                                        "Riavvio servizio: disattiva e riattiva OpenFlow nelle impostazioni.",
                                         Toast.LENGTH_LONG
                                     ).show()
                                     val intent = Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).apply {
@@ -218,403 +276,614 @@ fun MainSettingsScreen(prefs: PreferencesManager, resumeTrigger: Int = 0) {
                                     }
                                     context.startActivity(intent)
                                 }
-                            },
-                            colors = ButtonDefaults.buttonColors(containerColor = FlowViolet),
-                            shape = RoundedCornerShape(10.dp),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Text("Mostra Bollicina Ora ✨", fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                        }
-                    }
-                }
-            }
-
-            // Sezione 1: Checklist Permessi
-            item {
-                SectionHeader(title = "STATO PERMESSI")
-                Spacer(modifier = Modifier.height(8.dp))
-                Card(
-                    colors = CardDefaults.cardColors(containerColor = FlowSurface),
-                    border = CardDefaults.outlinedCardBorder().copy(brush = Brush.verticalGradient(listOf(FlowBorder, FlowSurfaceElevated))),
-                    shape = RoundedCornerShape(16.dp)
-                ) {
-                    Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        PermissionRow(
-                            title = "Accessibilità OpenFlow (Fondamentale)",
-                            desc = "Permette di mostrare la bolla sopra la tastiera e inserire il testo",
-                            isGranted = hasAccessibilityPermission,
-                            onClick = {
-                                context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
-                            }
-                        )
-                        HorizontalDivider(color = FlowBorder.copy(alpha = 0.5f))
-                        PermissionRow(
-                            title = "Microfono",
-                            desc = "Per registrare la tua voce ad alta fedeltà",
-                            isGranted = hasMicPermission,
-                            onClick = { micLauncher.launch(Manifest.permission.RECORD_AUDIO) }
-                        )
-                        HorizontalDivider(color = FlowBorder.copy(alpha = 0.5f))
-                        PermissionRow(
-                            title = "Overlay Schermo (Opzionale)",
-                            desc = "Consente alla bolla di sovrapporsi a tutte le app",
-                            isGranted = hasOverlayPermission,
-                            onClick = {
-                                val intent = Intent(
-                                    Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
-                                    Uri.parse("package:${context.packageName}")
-                                )
-                                context.startActivity(intent)
                             }
                         )
                     }
                 }
             }
 
-            // Sezione 2: Motore IA & Chiave API
+            // 2. Sezione Motore IA & Segmented Control
             item {
                 SectionHeader(title = "MOTORE INTELLIGENZA ARTIFICIALE")
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(6.dp))
 
-                Card(
-                    colors = CardDefaults.cardColors(containerColor = FlowSurface),
-                    shape = RoundedCornerShape(16.dp),
-                    border = CardDefaults.outlinedCardBorder().copy(brush = Brush.verticalGradient(listOf(FlowBorder, FlowSurfaceElevated)))
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(CardBg)
+                        .border(1.dp, HairlineBorder, RoundedCornerShape(14.dp))
+                        .padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(14.dp)
                 ) {
-                    Column(modifier = Modifier.padding(16.dp)) {
-                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            ProviderTab(
-                                title = "Groq",
-                                subtitle = "Free LPU",
-                                isSelected = activeProvider == ApiProvider.GROQ,
-                                modifier = Modifier.weight(1f),
-                                onClick = {
-                                    activeProvider = ApiProvider.GROQ
-                                    prefs.activeProvider = ApiProvider.GROQ
-                                }
-                            )
-                            ProviderTab(
-                                title = "Gemini",
-                                subtitle = "Free Google",
-                                isSelected = activeProvider == ApiProvider.GEMINI,
-                                modifier = Modifier.weight(1f),
-                                onClick = {
-                                    activeProvider = ApiProvider.GEMINI
-                                    prefs.activeProvider = ApiProvider.GEMINI
-                                }
-                            )
-                            ProviderTab(
-                                title = "OpenAI",
-                                subtitle = "Wispr Pro",
-                                isSelected = activeProvider == ApiProvider.OPENAI,
-                                modifier = Modifier.weight(1f),
-                                onClick = {
-                                    activeProvider = ApiProvider.OPENAI
-                                    prefs.activeProvider = ApiProvider.OPENAI
-                                }
-                            )
+                    // Modern Fluid Segmented Pill Bar
+                    ProviderSegmentedBar(
+                        selectedProvider = activeProvider,
+                        onProviderSelected = { provider ->
+                            activeProvider = provider
+                            prefs.activeProvider = provider
                         }
+                    )
 
-                        Spacer(modifier = Modifier.height(16.dp))
+                    // API Key Field with clean styling
+                    val currentKey = when (activeProvider) {
+                        ApiProvider.GROQ -> groqKey
+                        ApiProvider.GEMINI -> geminiKey
+                        ApiProvider.OPENAI -> openAiKey
+                    }
 
-                        val currentKey = when (activeProvider) {
-                            ApiProvider.GROQ -> groqKey
-                            ApiProvider.GEMINI -> geminiKey
-                            ApiProvider.OPENAI -> openAiKey
-                        }
-                        OutlinedTextField(
-                            value = currentKey,
-                            onValueChange = { newValue ->
+                    OutlinedTextField(
+                        value = currentKey,
+                        onValueChange = { newValue ->
+                            when (activeProvider) {
+                                ApiProvider.GROQ -> {
+                                    groqKey = newValue
+                                    prefs.groqKey = newValue
+                                }
+                                ApiProvider.GEMINI -> {
+                                    geminiKey = newValue
+                                    prefs.geminiKey = newValue
+                                }
+                                ApiProvider.OPENAI -> {
+                                    openAiKey = newValue
+                                    prefs.openAiKey = newValue
+                                }
+                            }
+                        },
+                        label = { Text("Chiave API ${activeProvider.displayName}") },
+                        placeholder = {
+                            Text(
                                 when (activeProvider) {
-                                    ApiProvider.GROQ -> {
-                                        groqKey = newValue
-                                        prefs.groqKey = newValue
-                                    }
-                                    ApiProvider.GEMINI -> {
-                                        geminiKey = newValue
-                                        prefs.geminiKey = newValue
-                                    }
-                                    ApiProvider.OPENAI -> {
-                                        openAiKey = newValue
-                                        prefs.openAiKey = newValue
-                                    }
+                                    ApiProvider.GROQ -> "gsk_..."
+                                    ApiProvider.GEMINI -> "AIzaSy..."
+                                    ApiProvider.OPENAI -> "sk-..."
                                 }
-                            },
-                            label = { Text("Chiave API ${activeProvider.displayName}") },
-                            placeholder = {
-                                Text(
-                                    when (activeProvider) {
-                                        ApiProvider.GROQ -> "gsk_..."
-                                        ApiProvider.GEMINI -> "AIzaSy..."
-                                        ApiProvider.OPENAI -> "sk-..."
-                                    }
-                                )
-                            },
-                            modifier = Modifier.fillMaxWidth(),
-                            singleLine = true,
-                            visualTransformation = if (isKeyVisible) VisualTransformation.None else PasswordVisualTransformation(),
-                            trailingIcon = {
+                            )
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        visualTransformation = if (isKeyVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                        trailingIcon = {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                if (currentKey.isBlank() && clipboard != null && clipboard.hasPrimaryClip()) {
+                                    Text(
+                                        text = "Incolla",
+                                        color = TextSecondary,
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        modifier = Modifier
+                                            .clip(RoundedCornerShape(6.dp))
+                                            .background(CardHighlight)
+                                            .clickable {
+                                                val clipData = clipboard.primaryClip
+                                                if (clipData != null && clipData.itemCount > 0) {
+                                                    val pasted = clipData.getItemAt(0).text?.toString()?.trim() ?: ""
+                                                    if (pasted.isNotBlank()) {
+                                                        when (activeProvider) {
+                                                            ApiProvider.GROQ -> { groqKey = pasted; prefs.groqKey = pasted }
+                                                            ApiProvider.GEMINI -> { geminiKey = pasted; prefs.geminiKey = pasted }
+                                                            ApiProvider.OPENAI -> { openAiKey = pasted; prefs.openAiKey = pasted }
+                                                        }
+                                                        Toast.makeText(context, "Chiave incollata!", Toast.LENGTH_SHORT).show()
+                                                    }
+                                                }
+                                            }
+                                            .padding(horizontal = 8.dp, vertical = 4.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                }
                                 IconButton(onClick = { isKeyVisible = !isKeyVisible }) {
                                     Icon(
                                         imageVector = if (isKeyVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff,
                                         contentDescription = null,
-                                        tint = FlowTextSecondary
+                                        tint = TextSecondary,
+                                        modifier = Modifier.size(18.dp)
                                     )
                                 }
-                            },
-                            colors = OutlinedTextFieldDefaults.colors(
-                                focusedBorderColor = FlowViolet,
-                                unfocusedBorderColor = FlowBorder,
-                                focusedLabelColor = FlowVioletLight,
-                                cursorColor = FlowViolet
-                            ),
-                            shape = RoundedCornerShape(12.dp)
-                        )
+                            }
+                        },
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = HairlineBorderFocus,
+                            unfocusedBorderColor = HairlineBorder,
+                            focusedContainerColor = CardElevated,
+                            unfocusedContainerColor = CardElevated,
+                            focusedLabelColor = TextPrimary,
+                            unfocusedLabelColor = TextSecondary,
+                            cursorColor = TextPrimary
+                        ),
+                        shape = RoundedCornerShape(10.dp)
+                    )
 
-                        Spacer(modifier = Modifier.height(6.dp))
-                        val hint = when (activeProvider) {
-                            ApiProvider.GROQ -> "⚡ 100% Gratis (console.groq.com) • LPU Ultra-Veloce con auto-discovery"
-                            ApiProvider.GEMINI -> "🌟 100% Gratis (aistudio.google.com) • Trascrizione multimodale God-Tier"
-                            ApiProvider.OPENAI -> "👑 Motore identico a Wispr Flow (platform.openai.com) • ~0.003$ per vocale"
-                        }
-                        Text(text = hint, fontSize = 11.sp, color = FlowEmerald, fontWeight = FontWeight.Medium)
+                    // Minimal metadata caption
+                    val providerDesc = when (activeProvider) {
+                        ApiProvider.GROQ -> "⚡ 100% Gratis • Latenza ~200ms su chip LPU (console.groq.com)"
+                        ApiProvider.GEMINI -> "🌟 100% Gratis • Trascrizione multimodale God-Tier (aistudio.google.com)"
+                        ApiProvider.OPENAI -> "👑 Motore originale Wispr Flow (~0.003$ per vocale, platform.openai.com)"
+                    }
+                    Text(text = providerDesc, fontSize = 11.sp, color = TextSecondary)
 
-                        Spacer(modifier = Modifier.height(14.dp))
+                    HorizontalDivider(color = HairlineBorder.copy(alpha = 0.6f), thickness = 1.dp)
+
+                    // Lingua Dettatura
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
                         Text(
-                            text = "Lingua dettatura Whisper (fissa la lingua per evitare allucinazioni):",
-                            fontSize = 12.sp,
-                            color = FlowTextSecondary,
-                            fontWeight = FontWeight.SemiBold
+                            text = "Lingua Dettatura",
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = TextPrimary
                         )
-                        Spacer(modifier = Modifier.height(6.dp))
-                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            val languages = listOf("it" to "🇮🇹 Italiano", "en" to "🇬🇧 English", "auto" to "🌐 Auto")
+
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            val languages = listOf("it" to "IT", "en" to "EN", "auto" to "AUTO")
                             languages.forEach { (code, label) ->
                                 val isSel = selectedLanguage == code
                                 Box(
                                     modifier = Modifier
-                                        .weight(1f)
-                                        .clip(RoundedCornerShape(8.dp))
-                                        .background(if (isSel) FlowViolet.copy(alpha = 0.25f) else FlowSurfaceElevated)
-                                        .border(1.dp, if (isSel) FlowViolet else FlowBorder, RoundedCornerShape(8.dp))
+                                        .clip(RoundedCornerShape(6.dp))
+                                        .background(if (isSel) CardHighlight else Color.Transparent)
+                                        .border(1.dp, if (isSel) HairlineBorderFocus else HairlineBorder, RoundedCornerShape(6.dp))
                                         .clickable {
                                             selectedLanguage = code
                                             prefs.language = code
                                         }
-                                        .padding(vertical = 8.dp),
+                                        .padding(horizontal = 10.dp, vertical = 5.dp),
                                     contentAlignment = Alignment.Center
                                 ) {
                                     Text(
                                         text = label,
-                                        fontSize = 12.sp,
+                                        fontSize = 11.sp,
                                         fontWeight = if (isSel) FontWeight.Bold else FontWeight.Normal,
-                                        color = if (isSel) FlowTextPrimary else FlowTextSecondary
+                                        color = if (isSel) TextPrimary else TextSecondary
                                     )
                                 }
                             }
                         }
-
-                        Spacer(modifier = Modifier.height(10.dp))
-                        Text(
-                            text = if (activeProvider == ApiProvider.GROQ)
-                                "⚡ Groq offre token gratuiti e un tempo di risposta di soli 200ms per Whisper v3 Turbo."
-                            else
-                                "🔑 OpenAI Whisper costa $0.006 al minuto: con $1 detti per quasi 3 ore.",
-                            fontSize = 12.sp,
-                            color = FlowTextSecondary
-                        )
                     }
                 }
             }
 
-            // Sezione 3: Stile & Preset di Scrittura
+            // 3. Stile di Scrittura & Preset
             item {
-                SectionHeader(title = "STILE DI SCRITTURA & RIFINITURA")
-                Spacer(modifier = Modifier.height(8.dp))
+                SectionHeader(title = "STILE EDITORIALE")
+                Spacer(modifier = Modifier.height(6.dp))
 
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    PromptPreset.values().forEach { preset ->
-                        PresetCard(
-                            preset = preset,
-                            isSelected = activePreset == preset,
-                            onClick = {
-                                activePreset = preset
-                                prefs.activePreset = preset
-                                Toast.makeText(context, "Preset: ${preset.title}", Toast.LENGTH_SHORT).show()
-                            }
-                        )
+                PresetSelector(
+                    activePreset = activePreset,
+                    onPresetSelected = { preset ->
+                        activePreset = preset
+                        prefs.activePreset = preset
                     }
-                }
+                )
             }
 
-            // Sezione 4: Preferenze Comportamento
+            // 4. Permessi & Integrazione Sistema
+            item {
+                SectionHeader(title = "STATO SISTEMA & PERMESSI")
+                Spacer(modifier = Modifier.height(6.dp))
+
+                SystemStatusCard(
+                    hasAccessibility = hasAccessibilityPermission,
+                    hasMic = hasMicPermission,
+                    hasOverlay = hasOverlayPermission,
+                    onOpenAccessibility = {
+                        context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+                    },
+                    onRequestMic = { micLauncher.launch(Manifest.permission.RECORD_AUDIO) },
+                    onRequestOverlay = {
+                        val intent = Intent(
+                            Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                            Uri.parse("package:${context.packageName}")
+                        )
+                        context.startActivity(intent)
+                    }
+                )
+            }
+
+            // 5. Opzioni Comportamento
             item {
                 SectionHeader(title = "COMPORTAMENTO OVERLAY")
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(6.dp))
 
-                Card(
-                    colors = CardDefaults.cardColors(containerColor = FlowSurface),
-                    shape = RoundedCornerShape(16.dp),
-                    border = CardDefaults.outlinedCardBorder().copy(brush = Brush.verticalGradient(listOf(FlowBorder, FlowSurfaceElevated)))
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(CardBg)
+                        .border(1.dp, HairlineBorder, RoundedCornerShape(14.dp))
+                        .padding(horizontal = 16.dp, vertical = 10.dp)
                 ) {
-                    Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text("A comparsa solo su campi testo", fontWeight = FontWeight.SemiBold, color = FlowTextPrimary, fontSize = 15.sp)
-                                Text("Disattiva per mantenere la bolla sempre visibile sul bordo", color = FlowTextSecondary, fontSize = 12.sp)
+                    SwitchSettingRow(
+                        title = "Mostra solo su campi di testo",
+                        subtitle = "Nasconde la bolla quando la tastiera non è attiva",
+                        checked = showOnlyWhenFocused,
+                        onCheckedChange = {
+                            showOnlyWhenFocused = it
+                            prefs.showOnlyWhenFocused = it
+                            if (!it) {
+                                FlowAccessibilityService.instance?.triggerShowBubble()
                             }
-                            Switch(
-                                checked = showOnlyWhenFocused,
-                                onCheckedChange = {
-                                    showOnlyWhenFocused = it
-                                    prefs.showOnlyWhenFocused = it
-                                    if (!it) {
-                                        FlowAccessibilityService.instance?.triggerShowBubble()
-                                    }
-                                },
-                                colors = SwitchDefaults.colors(checkedThumbColor = FlowVioletLight, checkedTrackColor = FlowViolet.copy(alpha = 0.5f))
-                            )
                         }
+                    )
 
-                        HorizontalDivider(color = FlowBorder.copy(alpha = 0.5f))
+                    HorizontalDivider(color = HairlineBorder.copy(alpha = 0.6f), thickness = 1.dp)
 
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text("Feedback Aptico", fontWeight = FontWeight.SemiBold, color = FlowTextPrimary, fontSize = 15.sp)
-                                Text("Micro-vibrazioni all'avvio e termine della registrazione", color = FlowTextSecondary, fontSize = 12.sp)
-                            }
-                            Switch(
-                                checked = hapticEnabled,
-                                onCheckedChange = {
-                                    hapticEnabled = it
-                                    prefs.hapticFeedbackEnabled = it
-                                },
-                                colors = SwitchDefaults.colors(checkedThumbColor = FlowVioletLight, checkedTrackColor = FlowViolet.copy(alpha = 0.5f))
-                            )
+                    SwitchSettingRow(
+                        title = "Feedback Aptico",
+                        subtitle = "Vibrazione tattile discreta all'avvio e rilascio",
+                        checked = hapticEnabled,
+                        onCheckedChange = {
+                            hapticEnabled = it
+                            prefs.hapticFeedbackEnabled = it
                         }
-                    }
+                    )
                 }
-                Spacer(modifier = Modifier.height(30.dp))
+
+                Spacer(modifier = Modifier.height(28.dp))
             }
         }
     }
 }
+
+// -------------------------------------------------------------
+// Componenti UI Minimalisti & Anti-Slop (Swiss / Refactoring UI)
+// -------------------------------------------------------------
 
 @Composable
 fun SectionHeader(title: String) {
     Text(
         text = title,
-        color = FlowVioletLight,
-        fontSize = 12.sp,
-        fontWeight = FontWeight.Bold,
+        color = TextMuted,
+        fontSize = 11.sp,
+        fontWeight = FontWeight.SemiBold,
         letterSpacing = 1.sp
     )
 }
 
 @Composable
-fun PermissionRow(title: String, desc: String, isGranted: Boolean, onClick: () -> Unit) {
+fun TactileCard(
+    modifier: Modifier = Modifier,
+    content: @Composable () -> Unit
+) {
+    Box(
+        modifier = modifier
+            .clip(RoundedCornerShape(14.dp))
+            .background(CardBg)
+            .border(1.dp, HairlineBorder, RoundedCornerShape(14.dp))
+    ) {
+        content()
+    }
+}
+
+@Composable
+fun TactileButton(
+    text: String,
+    onClick: () -> Unit
+) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val isPressed by interactionSource.collectIsPressedAsState()
+    val scale by animateFloatAsState(
+        targetValue = if (isPressed) 0.95f else 1f,
+        animationSpec = spring(dampingRatio = Spring.DampingRatioLowBouncy, stiffness = Spring.StiffnessMedium),
+        label = "button_scale"
+    )
+
+    Box(
+        modifier = Modifier
+            .graphicsLayer {
+                scaleX = scale
+                scaleY = scale
+            }
+            .clip(RoundedCornerShape(9.dp))
+            .background(CardHighlight)
+            .border(1.dp, HairlineBorderFocus, RoundedCornerShape(9.dp))
+            .clickable(
+                interactionSource = interactionSource,
+                indication = null
+            ) { onClick() }
+            .padding(horizontal = 14.dp, vertical = 9.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text = text,
+            fontSize = 13.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = TextPrimary
+        )
+    }
+}
+
+@Composable
+fun ProviderSegmentedBar(
+    selectedProvider: ApiProvider,
+    onProviderSelected: (ApiProvider) -> Unit
+) {
+    val providers = listOf(
+        Triple(ApiProvider.GROQ, "Groq", "Free LPU"),
+        Triple(ApiProvider.GEMINI, "Gemini", "Free AI Studio"),
+        Triple(ApiProvider.OPENAI, "OpenAI", "Wispr Nativo")
+    )
+    val selectedIndex = providers.indexOfFirst { it.first == selectedProvider }.coerceAtLeast(0)
+
+    BoxWithConstraints(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(10.dp))
+            .background(CardElevated)
+            .border(1.dp, HairlineBorder, RoundedCornerShape(10.dp))
+            .padding(3.dp)
+    ) {
+        val tabWidth = maxWidth / providers.size
+        val indicatorOffset by animateDpAsState(
+            targetValue = tabWidth * selectedIndex,
+            animationSpec = spring(dampingRatio = Spring.DampingRatioLowBouncy, stiffness = Spring.StiffnessMediumLow),
+            label = "tab_slide"
+        )
+
+        // Pillola mobile animata
+        Box(
+            modifier = Modifier
+                .offset(x = indicatorOffset)
+                .width(tabWidth)
+                .fillMaxHeight()
+                .clip(RoundedCornerShape(8.dp))
+                .background(CardHighlight)
+                .border(1.dp, HairlineBorderFocus, RoundedCornerShape(8.dp))
+        )
+
+        Row(modifier = Modifier.fillMaxWidth()) {
+            providers.forEach { (provider, label, sub) ->
+                val isSelected = provider == selectedProvider
+                val interactionSource = remember { MutableInteractionSource() }
+                val isPressed by interactionSource.collectIsPressedAsState()
+                val scale by animateFloatAsState(targetValue = if (isPressed) 0.96f else 1f, label = "tab_press")
+
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .graphicsLayer {
+                            scaleX = scale
+                            scaleY = scale
+                        }
+                        .clip(RoundedCornerShape(8.dp))
+                        .clickable(
+                            interactionSource = interactionSource,
+                            indication = null
+                        ) { onProviderSelected(provider) }
+                        .padding(vertical = 8.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(
+                            text = label,
+                            fontSize = 13.sp,
+                            fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
+                            color = if (isSelected) TextPrimary else TextSecondary
+                        )
+                        Text(
+                            text = sub,
+                            fontSize = 10.sp,
+                            color = if (isSelected) StatusEmerald else TextMuted
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun PresetSelector(
+    activePreset: PromptPreset,
+    onPresetSelected: (PromptPreset) -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(14.dp))
+            .background(CardBg)
+            .border(1.dp, HairlineBorder, RoundedCornerShape(14.dp))
+    ) {
+        val presets = PromptPreset.values()
+        presets.forEachIndexed { index, preset ->
+            val isSelected = preset == activePreset
+            val interactionSource = remember { MutableInteractionSource() }
+            val isPressed by interactionSource.collectIsPressedAsState()
+            val scale by animateFloatAsState(targetValue = if (isPressed) 0.985f else 1f, label = "preset_scale")
+            val bgColor by animateColorAsState(
+                targetValue = if (isSelected) CardElevated else Color.Transparent,
+                animationSpec = tween(150),
+                label = "preset_bg"
+            )
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .graphicsLayer {
+                        scaleX = scale
+                        scaleY = scale
+                    }
+                    .background(bgColor)
+                    .clickable(
+                        interactionSource = interactionSource,
+                        indication = null
+                    ) { onPresetSelected(preset) }
+                    .padding(horizontal = 16.dp, vertical = 13.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // Indicatore di selezione minimal
+                Box(
+                    modifier = Modifier
+                        .size(7.dp)
+                        .clip(CircleShape)
+                        .background(if (isSelected) StatusEmerald else TextMuted.copy(alpha = 0.4f))
+                )
+                Spacer(modifier = Modifier.width(12.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = preset.title,
+                        fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
+                        color = if (isSelected) TextPrimary else TextSecondary,
+                        fontSize = 14.sp
+                    )
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = preset.description,
+                        color = if (isSelected) TextSecondary else TextMuted,
+                        fontSize = 12.sp,
+                        lineHeight = 16.sp
+                    )
+                }
+                if (isSelected) {
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Icon(
+                        imageVector = Icons.Default.Check,
+                        contentDescription = null,
+                        tint = TextPrimary,
+                        modifier = Modifier.size(16.dp)
+                    )
+                }
+            }
+
+            if (index < presets.size - 1) {
+                HorizontalDivider(color = HairlineBorder.copy(alpha = 0.6f), thickness = 1.dp)
+            }
+        }
+    }
+}
+
+@Composable
+fun SystemStatusCard(
+    hasAccessibility: Boolean,
+    hasMic: Boolean,
+    hasOverlay: Boolean,
+    onOpenAccessibility: () -> Unit,
+    onRequestMic: () -> Unit,
+    onRequestOverlay: () -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(14.dp))
+            .background(CardBg)
+            .border(1.dp, HairlineBorder, RoundedCornerShape(14.dp))
+    ) {
+        StatusRow(
+            title = "Accessibilità OpenFlow",
+            subtitle = "Intercetta i campi testo e inserisce la trascrizione",
+            isGranted = hasAccessibility,
+            onClick = onOpenAccessibility
+        )
+        HorizontalDivider(color = HairlineBorder.copy(alpha = 0.6f), thickness = 1.dp)
+        StatusRow(
+            title = "Microfono ad Alta Fedeltà",
+            subtitle = "Cattura l'audio con DSP di cancellazione rumore",
+            isGranted = hasMic,
+            onClick = onRequestMic
+        )
+        HorizontalDivider(color = HairlineBorder.copy(alpha = 0.6f), thickness = 1.dp)
+        StatusRow(
+            title = "Sovrapposizione Overlay",
+            subtitle = "Consente alla bolla di fluttuare sopra le altre app",
+            isGranted = hasOverlay,
+            onClick = onRequestOverlay
+        )
+    }
+}
+
+@Composable
+fun StatusRow(
+    title: String,
+    subtitle: String,
+    isGranted: Boolean,
+    onClick: () -> Unit
+) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(enabled = !isGranted) { onClick() }
+            .padding(horizontal = 16.dp, vertical = 13.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(title, fontWeight = FontWeight.Medium, color = TextPrimary, fontSize = 14.sp)
+            Spacer(modifier = Modifier.height(1.dp))
+            Text(subtitle, color = TextMuted, fontSize = 12.sp)
+        }
+        Spacer(modifier = Modifier.width(10.dp))
+        if (isGranted) {
+            Row(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(20.dp))
+                    .background(StatusEmerald.copy(alpha = 0.12f))
+                    .padding(horizontal = 8.dp, vertical = 3.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(5.dp)
+                        .clip(CircleShape)
+                        .background(StatusEmerald)
+                )
+                Spacer(modifier = Modifier.width(5.dp))
+                Text("Attivo", color = StatusEmerald, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+            }
+        } else {
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(CardHighlight)
+                    .border(1.dp, HairlineBorderFocus, RoundedCornerShape(8.dp))
+                    .clickable { onClick() }
+                    .padding(horizontal = 10.dp, vertical = 5.dp)
+            ) {
+                Text("Abilita", fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = TextPrimary)
+            }
+        }
+    }
+}
+
+@Composable
+fun SwitchSettingRow(
+    title: String,
+    subtitle: String,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
             .padding(vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
         Column(modifier = Modifier.weight(1f)) {
-            Text(title, fontWeight = FontWeight.SemiBold, color = FlowTextPrimary, fontSize = 15.sp)
-            Text(desc, color = FlowTextSecondary, fontSize = 12.sp)
+            Text(title, fontWeight = FontWeight.Medium, color = TextPrimary, fontSize = 14.sp)
+            Spacer(modifier = Modifier.height(1.dp))
+            Text(subtitle, color = TextMuted, fontSize = 12.sp)
         }
-        Spacer(modifier = Modifier.width(8.dp))
-        if (isGranted) {
-            Box(
-                modifier = Modifier
-                    .clip(CircleShape)
-                    .background(FlowEmerald.copy(alpha = 0.15f))
-                    .padding(horizontal = 10.dp, vertical = 4.dp)
-            ) {
-                Text("Attivo ✓", color = FlowEmerald, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-            }
-        } else {
-            Button(
-                onClick = onClick,
-                colors = ButtonDefaults.buttonColors(containerColor = FlowViolet),
-                shape = RoundedCornerShape(8.dp),
-                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
-            ) {
-                Text("Attiva", fontSize = 12.sp, fontWeight = FontWeight.Bold)
-            }
-        }
-    }
-}
-
-@Composable
-fun ProviderTab(title: String, subtitle: String, isSelected: Boolean, modifier: Modifier, onClick: () -> Unit) {
-    Box(
-        modifier = modifier
-            .clip(RoundedCornerShape(12.dp))
-            .background(if (isSelected) FlowViolet.copy(alpha = 0.2f) else FlowSurfaceElevated)
-            .border(
-                width = if (isSelected) 1.5.dp else 1.dp,
-                color = if (isSelected) FlowViolet else FlowBorder,
-                shape = RoundedCornerShape(12.dp)
-            )
-            .clickable { onClick() }
-            .padding(12.dp)
-    ) {
-        Column {
-            Text(title, fontWeight = FontWeight.Bold, color = if (isSelected) FlowTextPrimary else FlowTextSecondary, fontSize = 13.sp)
-            Text(subtitle, color = if (isSelected) FlowEmerald else FlowTextSecondary.copy(alpha = 0.7f), fontSize = 11.sp)
-        }
-    }
-}
-
-@Composable
-fun PresetCard(preset: PromptPreset, isSelected: Boolean, onClick: () -> Unit) {
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable { onClick() },
-        colors = CardDefaults.cardColors(
-            containerColor = if (isSelected) FlowSurfaceElevated else FlowSurface
-        ),
-        shape = RoundedCornerShape(14.dp),
-        border = CardDefaults.outlinedCardBorder().copy(
-            brush = Brush.horizontalGradient(
-                if (isSelected) listOf(FlowViolet, FlowVioletLight) else listOf(FlowBorder, FlowBorder)
+        Spacer(modifier = Modifier.width(10.dp))
+        Switch(
+            checked = checked,
+            onCheckedChange = onCheckedChange,
+            colors = SwitchDefaults.colors(
+                checkedThumbColor = TextPrimary,
+                checkedTrackColor = CardHighlight,
+                checkedBorderColor = HairlineBorderFocus,
+                uncheckedThumbColor = TextMuted,
+                uncheckedTrackColor = CardElevated,
+                uncheckedBorderColor = HairlineBorder
             )
         )
-    ) {
-        Row(
-            modifier = Modifier.padding(14.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            RadioButton(
-                selected = isSelected,
-                onClick = onClick,
-                colors = RadioButtonDefaults.colors(selectedColor = FlowVioletLight, unselectedColor = FlowBorder)
-            )
-            Spacer(modifier = Modifier.width(8.dp))
-            Column {
-                Text(preset.title, fontWeight = FontWeight.Bold, color = FlowTextPrimary, fontSize = 14.sp)
-                Text(preset.description, color = FlowTextSecondary, fontSize = 12.sp)
-            }
-        }
     }
 }
 
 private fun isAccessibilityServiceEnabled(context: Context): Boolean {
-    // Se l'istanza è viva in memoria, il servizio è sicuramente attivo al 100%
     if (FlowAccessibilityService.instance != null) return true
-
     val am = context.getSystemService(Context.ACCESSIBILITY_SERVICE) as? AccessibilityManager ?: return false
     val enabledServices = am.getEnabledAccessibilityServiceList(AccessibilityServiceInfo.FEEDBACK_ALL_MASK)
     return enabledServices.any { it.resolveInfo.serviceInfo.packageName == context.packageName }

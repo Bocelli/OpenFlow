@@ -265,24 +265,24 @@ class FloatingBubbleOverlay(
     private inner class BubbleCustomView(context: Context) : View(context) {
 
         private val backgroundPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = Color.parseColor("#0F0F14")
+            color = Color.parseColor("#101115")
             style = Paint.Style.FILL
         }
 
         private val borderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = Color.parseColor("#7C3AED")
+            color = Color.parseColor("#262832")
             style = Paint.Style.STROKE
-            strokeWidth = dpToPx(2.5f).toFloat()
+            strokeWidth = dpToPx(1.8f).toFloat()
         }
 
         private val wavePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = Color.parseColor("#A855F7")
+            color = Color.parseColor("#EDEDEE")
             style = Paint.Style.FILL
             strokeCap = Paint.Cap.ROUND
         }
 
         private val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = Color.parseColor("#F9FAFB")
+            color = Color.parseColor("#EDEDEE")
             textSize = dpToPx(18f).toFloat()
             typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
             textAlign = Paint.Align.CENTER
@@ -335,11 +335,11 @@ class FloatingBubbleOverlay(
             val radius = rect.height() / 2f
 
             when (state) {
-                BubbleState.RECORDING -> borderPaint.color = Color.parseColor("#10B981") // Verde Emerald
-                BubbleState.PROCESSING -> borderPaint.color = Color.parseColor("#9333EA") // Glow Violet
-                BubbleState.ERROR -> borderPaint.color = Color.parseColor("#EF4444") // Rosso
+                BubbleState.RECORDING -> borderPaint.color = Color.parseColor("#10B981") // Sottile accento smeraldo
+                BubbleState.PROCESSING -> borderPaint.color = Color.parseColor("#3B3E4C") // Grigio titanio
+                BubbleState.ERROR -> borderPaint.color = Color.parseColor("#EF4444") // Rosso discreto
                 BubbleState.SUCCESS -> borderPaint.color = Color.parseColor("#10B981")
-                else -> borderPaint.color = Color.parseColor("#7C3AED") // Violet Wispr
+                else -> borderPaint.color = Color.parseColor("#262832") // Hairline minimale riposante
             }
 
             canvas.drawRoundRect(rect, radius, radius, backgroundPaint)
@@ -353,32 +353,32 @@ class FloatingBubbleOverlay(
                     drawMicIcon(canvas, cx, cy)
                 }
                 BubbleState.RECORDING -> {
-                    val barWidth = dpToPx(4.5f).toFloat()
-                    val spacing = dpToPx(8.5f).toFloat()
+                    val barWidth = dpToPx(3.5f).toFloat()
+                    val spacing = dpToPx(7.5f).toFloat()
 
                     for (i in -2..2) {
                         val x = cx + (i * spacing)
                         val factor = 1f - (abs(i) * 0.22f)
-                        val barHeight = ((height * 0.6f) * normalizedAmp * factor).coerceAtLeast(dpToPx(6f).toFloat())
+                        val barHeight = ((height * 0.6f) * normalizedAmp * factor).coerceAtLeast(dpToPx(5f).toFloat())
                         val barRect = RectF(
                             x - barWidth / 2f,
                             cy - barHeight / 2f,
                             x + barWidth / 2f,
                             cy + barHeight / 2f
                         )
-                        wavePaint.color = Color.parseColor(if (i == 0) "#34D399" else "#C084FC")
-                        canvas.drawRoundRect(barRect, 6f, 6f, wavePaint)
+                        wavePaint.color = Color.parseColor(if (i == 0) "#34D399" else "#EDEDEE")
+                        canvas.drawRoundRect(barRect, 4f, 4f, wavePaint)
                     }
                 }
                 BubbleState.PROCESSING -> {
                     canvas.save()
                     canvas.rotate(spinnerAngle, cx, cy)
-                    val r = dpToPx(12f).toFloat()
+                    val r = dpToPx(11f).toFloat()
                     val sweepRect = RectF(cx - r, cy - r, cx + r, cy + r)
                     val spinPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                        color = Color.parseColor("#C084FC")
+                        color = Color.parseColor("#EDEDEE")
                         style = Paint.Style.STROKE
-                        strokeWidth = dpToPx(3f).toFloat()
+                        strokeWidth = dpToPx(2.2f).toFloat()
                         strokeCap = Paint.Cap.ROUND
                     }
                     canvas.drawArc(sweepRect, 0f, 270f, false, spinPaint)
@@ -395,7 +395,7 @@ class FloatingBubbleOverlay(
 
         private fun drawMicIcon(canvas: Canvas, cx: Float, cy: Float) {
             val micPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                color = Color.parseColor("#E9D5FF")
+                color = Color.parseColor("#EDEDEE")
                 style = Paint.Style.FILL
             }
             val headW = dpToPx(5f).toFloat()
@@ -404,9 +404,9 @@ class FloatingBubbleOverlay(
             canvas.drawRoundRect(micHead, headW, headW, micPaint)
 
             val arcPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                color = Color.parseColor("#E9D5FF")
+                color = Color.parseColor("#EDEDEE")
                 style = Paint.Style.STROKE
-                strokeWidth = dpToPx(2.2f).toFloat()
+                strokeWidth = dpToPx(2.0f).toFloat()
                 strokeCap = Paint.Cap.ROUND
             }
             val arcR = dpToPx(9f).toFloat()
