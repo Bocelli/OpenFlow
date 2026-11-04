@@ -116,6 +116,7 @@ class FloatingBubbleOverlay(
     }
 
     fun show(force: Boolean = false) {
+        fadeAnimator?.cancel()
         if (!isViewAttached) {
             initWindow()
         }

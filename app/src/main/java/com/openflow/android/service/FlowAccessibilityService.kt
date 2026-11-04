@@ -37,8 +37,22 @@ class FlowAccessibilityService : AccessibilityService() {
     private var currentContextText: String? = null
 
     private val hideBubbleRunnable = Runnable {
-        if (prefs.showOnlyWhenFocused && bubbleOverlay?.currentState == BubbleState.IDLE) {
-            Log.d(TAG, "hideBubble: nascondo bolla")
+        if (!prefs.showOnlyWhenFocused || bubbleOverlay?.currentState != BubbleState.IDLE) return@Runnable
+
+        try {
+            val root = rootInActiveWindow
+            val currentPkg = root?.packageName?.toString()?.lowercase() ?: ""
+            root?.recycle()
+
+            val isActuallyLauncher = currentPkg.contains("launcher") || currentPkg.contains("home") || currentPkg.isBlank()
+            if (isActuallyLauncher) {
+                Log.d(TAG, "hideBubble: confermato launcher ($currentPkg), nascondo bolla")
+                bubbleOverlay?.hide()
+            } else {
+                Log.d(TAG, "hideBubble: annullato perché app attiva ($currentPkg), mostro bolla")
+                bubbleOverlay?.show()
+            }
+        } catch (_: Exception) {
             bubbleOverlay?.hide()
         }
     }
@@ -61,7 +75,9 @@ class FlowAccessibilityService : AccessibilityService() {
         info.eventTypes = AccessibilityEvent.TYPE_VIEW_FOCUSED or
                 AccessibilityEvent.TYPE_VIEW_CLICKED or
                 AccessibilityEvent.TYPE_VIEW_TEXT_SELECTION_CHANGED or
-                AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED
+                AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED or
+                AccessibilityEvent.TYPE_VIEW_TEXT_CHANGED or
+                AccessibilityEvent.TYPE_WINDOWS_CHANGED
         info.feedbackType = AccessibilityServiceInfo.FEEDBACK_GENERIC
         info.flags = AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS or
                 AccessibilityServiceInfo.FLAG_REPORT_VIEW_IDS
@@ -69,7 +85,7 @@ class FlowAccessibilityService : AccessibilityService() {
         serviceInfo = info
 
         initBubbleOverlay()
-        bubbleOverlay?.show()
+        bubbleOverlay?.show(force = true)
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -118,30 +134,42 @@ class FlowAccessibilityService : AccessibilityService() {
         val source = event.source
 
         try {
-            // 1. Se l'utente torna alla Home o nel Launcher -> Nascondi la bolla
-            val isHomeOrLauncher = pkg.contains("launcher") || pkg.contains("home")
-            if (isHomeOrLauncher && event.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
-                Log.d(TAG, "--> Home/Launcher attivo, nascondo bolla: pkg=$pkg")
-                scheduleHideBubbleIfIdle(delayMs = 250)
-                return
+            ensureOverlayInitialized()
+
+            // 1. In modalità persistente (standard Wispr Flow), la bolla deve SEMPRE rimanere visibile a schermo su qualsiasi app
+            if (!prefs.showOnlyWhenFocused) {
+                if (bubbleOverlay?.isVisible == false) {
+                    bubbleOverlay?.show()
+                }
             }
 
-            // 2. Se è attiva la tastiera (GBoard, SwiftKey, ecc.) o un campo editabile / focus di testo
+            // 2. Rileva se il nodo corrente può ricevere testo (compatibile con Facebook, BlueMail, YouTube, WhatsApp, Telegram, Chrome, ecc.)
             val isIme = pkg.contains("inputmethod") || pkg.contains("keyboard") || pkg.contains(".ime")
-            val isEditable = (source?.isEditable == true) ||
+            val canAcceptText = (source?.isEditable == true) ||
                     cls.contains("EditText", ignoreCase = true) ||
                     cls.contains("TextField", ignoreCase = true) ||
-                    cls.contains("AutoCompleteTextView", ignoreCase = true)
+                    cls.contains("AutoComplete", ignoreCase = true) ||
+                    cls.contains("Input", ignoreCase = true) ||
+                    cls.contains("Search", ignoreCase = true) ||
+                    cls.contains("WebView", ignoreCase = true) ||
+                    cls.contains("Editor", ignoreCase = true) ||
+                    cls.contains("Compose", ignoreCase = true) ||
+                    (source?.actionList?.any { it.id == AccessibilityNodeInfo.ACTION_SET_TEXT || it.id == AccessibilityNodeInfo.ACTION_PASTE } == true)
 
-            if (isIme || isEditable) {
-                Log.d(TAG, "--> MATCH SHOW: isIme=$isIme, isEditable=$isEditable (pkg=$pkg, cls=$cls)")
-                mainHandler.removeCallbacks(hideBubbleRunnable)
-                if (source != null && source.isEditable) {
-                    updateActiveTarget(source)
-                }
-                ensureOverlayInitialized()
-                if (prefs.showOnlyWhenFocused) {
+            if (canAcceptText && source != null) {
+                updateActiveTarget(source)
+            }
+
+            // 3. Gestione Auto-Hide se l'utente ha esplicitamente attivato "Mostra solo su campi di testo"
+            if (prefs.showOnlyWhenFocused) {
+                if (isIme || canAcceptText) {
+                    mainHandler.removeCallbacks(hideBubbleRunnable)
                     bubbleOverlay?.show()
+                } else if (event.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
+                    val isLauncherPkg = pkg.contains("launcher") || pkg.contains("home")
+                    if (isLauncherPkg) {
+                        scheduleHideBubbleIfIdle(delayMs = 500)
+                    }
                 }
             }
         } finally {
@@ -149,11 +177,10 @@ class FlowAccessibilityService : AccessibilityService() {
         }
     }
 
-    private fun scheduleHideBubbleIfIdle(delayMs: Long = 350) {
-        if (prefs.showOnlyWhenFocused && bubbleOverlay?.currentState == BubbleState.IDLE) {
-            mainHandler.removeCallbacks(hideBubbleRunnable)
-            mainHandler.postDelayed(hideBubbleRunnable, delayMs)
-        }
+    private fun scheduleHideBubbleIfIdle(delayMs: Long = 500) {
+        if (!prefs.showOnlyWhenFocused) return
+        mainHandler.removeCallbacks(hideBubbleRunnable)
+        mainHandler.postDelayed(hideBubbleRunnable, delayMs)
     }
 
     private fun updateActiveTarget(node: AccessibilityNodeInfo) {
@@ -218,29 +245,51 @@ class FlowAccessibilityService : AccessibilityService() {
     }
 
     private fun insertTextIntoActiveField(newText: String) {
-        var target = activeTargetNode
+        // Salvagente universale: copia sempre il testo formattato negli appunti
+        copyToClipboard(newText)
+
+        var target: AccessibilityNodeInfo? = activeTargetNode
         var needsRecycleTarget = false
 
-        if (target == null || !target.isEditable) {
+        // 1. Cerca il nodo con focus di input attivo nella finestra corrente
+        if (target == null || !target.refresh()) {
             try {
                 val root = rootInActiveWindow
                 if (root != null) {
                     target = root.findFocus(AccessibilityNodeInfo.FOCUS_INPUT)
+                        ?: root.findFocus(AccessibilityNodeInfo.FOCUS_ACCESSIBILITY)
                     needsRecycleTarget = true
                     root.recycle()
                 }
             } catch (_: Exception) {}
         }
 
-        if (target == null || !target.isEditable) {
-            copyToClipboard(newText)
-            if (needsRecycleTarget) {
-                try { target?.recycle() } catch (_: Exception) {}
-            }
+        // 2. Cerca in tutte le finestre interattive (per popup, dialog, bottom-sheet di Facebook, YouTube, BlueMail)
+        if (target == null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            try {
+                for (window in windows) {
+                    val root = window.root ?: continue
+                    val focused = root.findFocus(AccessibilityNodeInfo.FOCUS_INPUT)
+                        ?: root.findFocus(AccessibilityNodeInfo.FOCUS_ACCESSIBILITY)
+                    root.recycle()
+                    if (focused != null) {
+                        target = focused
+                        needsRecycleTarget = true
+                        break
+                    }
+                }
+            } catch (_: Exception) {}
+        }
+
+        if (target == null) {
+            Log.d(TAG, "Nessun nodo attivo trovato: testo salvato negli appunti")
             return
         }
 
         try {
+            var inserted = false
+
+            // Tentativo 1: ACTION_SET_TEXT con eventuale testo pre-esistente
             val existingText = getSanitizedFieldText(target)
             val finalText = if (existingText.isNotBlank()) {
                 if (existingText.endsWith(" ")) "$existingText$newText" else "$existingText $newText"
@@ -251,13 +300,16 @@ class FlowAccessibilityService : AccessibilityService() {
             val arguments = Bundle().apply {
                 putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, finalText)
             }
+            inserted = target.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, arguments)
 
-            val success = target.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, arguments)
-
-            if (!success) {
-                copyToClipboard(newText)
-                target.performAction(AccessibilityNodeInfo.ACTION_PASTE)
+            // Tentativo 2: Fallback diretto ACTION_PASTE (indispensabile per WebViews di BlueMail, React Native di Facebook, YouTube)
+            if (!inserted) {
+                inserted = target.performAction(AccessibilityNodeInfo.ACTION_PASTE)
             }
+
+            Log.d(TAG, "Risultato inserimento testo: inserted=$inserted in ${target.className}")
+        } catch (e: Exception) {
+            Log.e(TAG, "Eccezione inserimento testo: ${e.message}", e)
         } finally {
             if (needsRecycleTarget) {
                 try { target.recycle() } catch (_: Exception) {}

@@ -171,8 +171,8 @@ class PreferencesManager(context: Context) {
         set(value) = prefs.edit().putString(KEY_LANGUAGE, value).apply()
 
     var showOnlyWhenFocused: Boolean
-        get() = prefs.getBoolean(KEY_SHOW_ONLY_WHEN_FOCUSED_V2, false)
-        set(value) = prefs.edit().putBoolean(KEY_SHOW_ONLY_WHEN_FOCUSED_V2, value).apply()
+        get() = prefs.getBoolean(KEY_SHOW_ONLY_WHEN_FOCUSED_V3, false)
+        set(value) = prefs.edit().putBoolean(KEY_SHOW_ONLY_WHEN_FOCUSED_V3, value).apply()
 
     var hasCompletedOnboarding: Boolean
         get() = prefs.getBoolean(KEY_ONBOARDING_DONE, false)
@@ -208,6 +208,7 @@ class PreferencesManager(context: Context) {
         private const val KEY_LANGUAGE = "key_language"
         private const val KEY_SHOW_ONLY_WHEN_FOCUSED = "key_show_focused"
         private const val KEY_SHOW_ONLY_WHEN_FOCUSED_V2 = "key_show_focused_v2"
+        private const val KEY_SHOW_ONLY_WHEN_FOCUSED_V3 = "key_show_focused_v3"
         private const val KEY_HAPTIC_ENABLED = "key_haptic_feedback"
         private const val KEY_ONBOARDING_DONE = "key_onboarding_completed"
         private const val KEY_CUSTOM_VOCABULARY = "key_custom_vocabulary"
