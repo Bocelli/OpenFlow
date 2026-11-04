@@ -806,12 +806,13 @@ class FloatingBubbleOverlay(
 
     companion object {
         private const val TAG = "NotchIslandOverlay"
-        private const val IDLE_WIDTH_DP = 34f
-        private const val IDLE_HEIGHT_DP = 34f
+        private const val IDLE_WIDTH_DP = 38.5f
+        private const val IDLE_HEIGHT_DP = 38.5f
         private const val RECORDING_WIDTH_DP = 216f
-        private const val RECORDING_HEIGHT_DP = 34f
+        private const val RECORDING_HEIGHT_DP = 36f
         private const val PROCESSING_WIDTH_DP = 152f
         private const val SUCCESS_WIDTH_DP = 142f
-        private const val TOP_OFFSET_DP = 8f
+        private const val TOP_OFFSET_DP = 5.75f
+        private const val MARGIN_DP = 12f
     }
 }
