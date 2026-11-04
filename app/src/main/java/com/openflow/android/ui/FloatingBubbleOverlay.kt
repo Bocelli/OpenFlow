@@ -115,7 +115,7 @@ class FloatingBubbleOverlay(
         return (dp * density + 0.5f).toInt()
     }
 
-    fun show(force: Boolean = false) {
+    fun show(force: Boolean = false, fromTyping: Boolean = false) {
         fadeAnimator?.cancel()
         if (!isViewAttached) {
             initWindow()
@@ -136,7 +136,12 @@ class FloatingBubbleOverlay(
             windowManager.updateViewLayout(view, params)
         } catch (_: Exception) {}
         view.invalidate()
-        scheduleStealth()
+
+        if (fromTyping) {
+            cancelStealth()
+        } else {
+            scheduleStealth()
+        }
     }
 
     fun hide() {
@@ -152,6 +157,7 @@ class FloatingBubbleOverlay(
 
         handler.removeCallbacks(amplitudePollingRunnable)
         handler.removeCallbacks(longPressRunnable)
+        handler.removeCallbacks(stealthDimRunnable)
 
         fadeAnimator?.cancel()
         fadeAnimator = ValueAnimator.ofFloat(1f, 0f).apply {
@@ -260,10 +266,36 @@ class FloatingBubbleOverlay(
         }
     }
 
-    private fun scheduleStealth() {
+    /**
+     * Risveglia istantaneamente la bolla dall'opacità ridotta (Stealth Mode 28%)
+     * e la porta al 100% di luminosità. Chiamato quando l'utente apre la tastiera o seleziona un campo di testo.
+     */
+    fun wakeUpFromStealth() {
+        handler.removeCallbacks(stealthDimRunnable)
+        if (!isVisible || !isViewAttached) {
+            show(fromTyping = true)
+            return
+        }
+        val view = bubbleView ?: return
+        if (view.alpha < 0.95f) {
+            view.animate().alpha(1.0f).setDuration(160).start()
+        }
+    }
+
+    /**
+     * Blocca il timer di attenuazione stealth: la bolla rimane al 100% visibile mentre l'utente scrive.
+     */
+    fun cancelStealth() {
+        handler.removeCallbacks(stealthDimRunnable)
+    }
+
+    /**
+     * Pianifica il ritorno in modalità Stealth (28% di opacità) dopo inattività (3.5 secondi).
+     */
+    fun scheduleStealth(delayMs: Long = 3500) {
         handler.removeCallbacks(stealthDimRunnable)
         if (prefs.stealthModeEnabled && currentState == BubbleState.IDLE) {
-            handler.postDelayed(stealthDimRunnable, 3500)
+            handler.postDelayed(stealthDimRunnable, delayMs)
         }
     }
 

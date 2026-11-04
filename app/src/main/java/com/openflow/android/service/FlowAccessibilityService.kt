@@ -43,7 +43,8 @@ class FlowAccessibilityService : AccessibilityService() {
         // Controllo di sicurezza: se la tastiera è ancora aperta a schermo, non nascondere
         if (isKeyboardVisible()) {
             Log.d(TAG, "hideBubble annullato: tastiera ancora visibile a schermo")
-            bubbleOverlay?.show()
+            bubbleOverlay?.wakeUpFromStealth()
+            bubbleOverlay?.cancelStealth()
             return@Runnable
         }
 
@@ -53,7 +54,8 @@ class FlowAccessibilityService : AccessibilityService() {
             Log.d(TAG, "hideBubble annullato: campo ancora focalizzato")
             updateActiveTarget(activeInput)
             activeInput.recycle()
-            bubbleOverlay?.show()
+            bubbleOverlay?.wakeUpFromStealth()
+            bubbleOverlay?.cancelStealth()
             return@Runnable
         }
 
@@ -141,18 +143,6 @@ class FlowAccessibilityService : AccessibilityService() {
         try {
             ensureOverlayInitialized()
 
-            // 1. In modalità persistente (standard Wispr Flow), la bolla deve SEMPRE rimanere visibile a schermo
-            if (!prefs.showOnlyWhenFocused) {
-                if (bubbleOverlay?.isVisible == false) {
-                    bubbleOverlay?.show()
-                }
-                if (source != null && isNodeInputCapable(source, cls, pkg)) {
-                    updateActiveTarget(source)
-                }
-                return
-            }
-
-            // 2. Modalità "Mostra solo su campi di testo":
             val keyboardOpen = isKeyboardVisible()
             val eventIsInput = isNodeInputCapable(source, cls, pkg)
 
@@ -160,25 +150,30 @@ class FlowAccessibilityService : AccessibilityService() {
                 updateActiveTarget(source)
             }
 
-            if (keyboardOpen || eventIsInput) {
-                mainHandler.removeCallbacks(hideBubbleRunnable)
-                if (bubbleOverlay?.isVisible == false) {
-                    Log.d(TAG, "Input/Tastiera rilevata (kb=$keyboardOpen, input=$eventIsInput): mostro bolla")
-                    bubbleOverlay?.show()
-                }
-            } else {
-                // Verifica globale per catturare campi non standard (es. YouTube, Facebook, BlueMail)
+            var hasActiveInput = eventIsInput || keyboardOpen
+            if (!hasActiveInput) {
                 val activeInput = findActiveFocusedInput()
                 if (activeInput != null) {
+                    hasActiveInput = true
                     updateActiveTarget(activeInput)
                     activeInput.recycle()
-                    mainHandler.removeCallbacks(hideBubbleRunnable)
-                    if (bubbleOverlay?.isVisible == false) {
-                        Log.d(TAG, "Focus globale attivo trovato: mostro bolla")
-                        bubbleOverlay?.show()
-                    }
-                } else {
+                }
+            }
+
+            if (hasActiveInput) {
+                // Risveglio immediato dallo Stealth Mode (28% -> 100% di opacità):
+                // L'utente ha la tastiera aperta o sta digitando su Facebook, YouTube, WhatsApp, BlueMail, ecc.
+                Log.d(TAG, "Input/Tastiera attiva rilevata ($pkg, kb=$keyboardOpen, input=$eventIsInput): risveglio Stealth Mode al 100%")
+                mainHandler.removeCallbacks(hideBubbleRunnable)
+                bubbleOverlay?.wakeUpFromStealth()
+                bubbleOverlay?.cancelStealth()
+            } else {
+                // Nessun input attivo e nessuna tastiera aperta:
+                if (prefs.showOnlyWhenFocused) {
                     scheduleHideBubbleIfIdle(delayMs = 700)
+                } else {
+                    // In modalità persistente, torna in semi-trasparenza dopo 3.5s per non coprire i contenuti
+                    bubbleOverlay?.scheduleStealth(3500)
                 }
             }
         } finally {
@@ -199,7 +194,15 @@ class FlowAccessibilityService : AccessibilityService() {
     private fun isKeyboardVisible(): Boolean {
         return try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-                windows.any { it.type == AccessibilityWindowInfo.TYPE_INPUT_METHOD }
+                val tempRect = android.graphics.Rect()
+                windows.any { window ->
+                    if (window.type == AccessibilityWindowInfo.TYPE_INPUT_METHOD) {
+                        window.getBoundsInScreen(tempRect)
+                        tempRect.height() > 100
+                    } else {
+                        false
+                    }
+                }
             } else {
                 false
             }
@@ -259,6 +262,17 @@ class FlowAccessibilityService : AccessibilityService() {
                 if (input != null) return input
             }
         } catch (_: Exception) {}
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            try {
+                for (window in windows) {
+                    val root = window.root ?: continue
+                    val input = root.findFocus(AccessibilityNodeInfo.FOCUS_INPUT)
+                    root.recycle()
+                    if (input != null) return input
+                }
+            } catch (_: Exception) {}
+        }
 
         return null
     }
