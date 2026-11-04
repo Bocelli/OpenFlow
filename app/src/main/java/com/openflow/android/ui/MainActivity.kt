@@ -154,20 +154,20 @@ fun MainSettingsScreen(prefs: PreferencesManager, resumeTrigger: Int = 0) {
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Box(
+                            Row(
                                 modifier = Modifier
                                     .size(34.dp)
                                     .clip(RoundedCornerShape(10.dp))
                                     .background(CardHighlight)
                                     .border(1.dp, HairlineBorder, RoundedCornerShape(10.dp)),
-                                contentAlignment = Alignment.Center
+                                horizontalArrangement = Arrangement.Center,
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Icon(
-                                    imageVector = Icons.Default.Mic,
-                                    contentDescription = null,
-                                    tint = TextPrimary,
-                                    modifier = Modifier.size(18.dp)
-                                )
+                                Box(modifier = Modifier.width(3.dp).height(10.dp).clip(RoundedCornerShape(1.5.dp)).background(TextSecondary))
+                                Spacer(modifier = Modifier.width(3.dp))
+                                Box(modifier = Modifier.width(3.dp).height(18.dp).clip(RoundedCornerShape(1.5.dp)).background(TextPrimary))
+                                Spacer(modifier = Modifier.width(3.dp))
+                                Box(modifier = Modifier.width(3.dp).height(13.dp).clip(RoundedCornerShape(1.5.dp)).background(TextSecondary))
                             }
                             Spacer(modifier = Modifier.width(12.dp))
                             Column {

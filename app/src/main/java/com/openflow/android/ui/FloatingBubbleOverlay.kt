@@ -350,7 +350,7 @@ class FloatingBubbleOverlay(
 
             when (state) {
                 BubbleState.IDLE -> {
-                    drawMicIcon(canvas, cx, cy)
+                    drawFlowGlyph(canvas, cx, cy)
                 }
                 BubbleState.RECORDING -> {
                     val barWidth = dpToPx(3.5f).toFloat()
@@ -393,28 +393,36 @@ class FloatingBubbleOverlay(
             }
         }
 
-        private fun drawMicIcon(canvas: Canvas, cx: Float, cy: Float) {
-            val micPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                color = Color.parseColor("#EDEDEE")
+        /**
+         * Glifo Acustico d'Autore OpenFlow (Swiss Minimalist):
+         * Sostituisce il vecchio microfono stock da podcast con una firma visiva
+         * armonica a 3 pilastri di flusso vocale (ascolto intelligente e fluido).
+         */
+        private fun drawFlowGlyph(canvas: Canvas, cx: Float, cy: Float) {
+            val glyphPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
                 style = Paint.Style.FILL
             }
-            val headW = dpToPx(5f).toFloat()
-            val headH = dpToPx(10f).toFloat()
-            val micHead = RectF(cx - headW, cy - headH, cx + headW, cy + headW)
-            canvas.drawRoundRect(micHead, headW, headW, micPaint)
+            val barW = dpToPx(3.6f).toFloat()
+            val spacing = dpToPx(7.5f).toFloat()
+            val radius = barW / 2f
 
-            val arcPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                color = Color.parseColor("#EDEDEE")
-                style = Paint.Style.STROKE
-                strokeWidth = dpToPx(2.0f).toFloat()
-                strokeCap = Paint.Cap.ROUND
+            val bars = listOf(
+                Triple(-1f, dpToPx(11f).toFloat(), "#8E9099"),
+                Triple(0f, dpToPx(19f).toFloat(), "#F4F4F5"),
+                Triple(1f, dpToPx(13f).toFloat(), "#8E9099")
+            )
+
+            for ((pos, h, colorHex) in bars) {
+                glyphPaint.color = Color.parseColor(colorHex)
+                val x = cx + (pos * spacing)
+                val rect = RectF(
+                    x - barW / 2f,
+                    cy - h / 2f,
+                    x + barW / 2f,
+                    cy + h / 2f
+                )
+                canvas.drawRoundRect(rect, radius, radius, glyphPaint)
             }
-            val arcR = dpToPx(9f).toFloat()
-            val arcRect = RectF(cx - arcR, cy - dpToPx(5f), cx + arcR, cy + dpToPx(7f))
-            canvas.drawArc(arcRect, 0f, 180f, false, arcPaint)
-
-            canvas.drawLine(cx, cy + dpToPx(7f), cx, cy + dpToPx(12f), arcPaint)
-            canvas.drawLine(cx - dpToPx(6f), cy + dpToPx(12f), cx + dpToPx(6f), cy + dpToPx(12f), arcPaint)
         }
     }
 

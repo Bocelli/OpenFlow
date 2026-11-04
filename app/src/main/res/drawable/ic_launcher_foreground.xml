@@ -1,0 +1,37 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- Pilastro 1 (Sinistra Esterno) -->
+    <path
+        android:fillColor="#71717A"
+        android:pathData="M 30.5,46.5 C 30.5,45.1 31.6,44 33,44 C 34.4,44 35.5,45.1 35.5,46.5 L 35.5,61.5 C 35.5,62.9 34.4,64 33,64 C 31.6,64 30.5,62.9 30.5,61.5 Z" />
+
+    <!-- Pilastro 2 (Sinistra Intermedio) -->
+    <path
+        android:fillColor="#D4D4D8"
+        android:pathData="M 40.25,38.75 C 40.25,37.2 41.5,36 43,36 C 44.5,36 45.75,37.2 45.75,38.75 L 45.75,69.25 C 45.75,70.8 44.5,72 43,72 C 41.5,72 40.25,70.8 40.25,69.25 Z" />
+
+    <!-- Pilastro 3 (Centro Flagship) -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M 51,31 C 51,29.35 52.35,28 54,28 C 55.65,28 57,29.35 57,31 L 57,77 C 57,78.65 55.65,80 54,80 C 52.35,80 51,78.65 51,77 Z" />
+
+    <!-- Pilastro 4 (Destra Intermedio) -->
+    <path
+        android:fillColor="#D4D4D8"
+        android:pathData="M 62.25,38.75 C 62.25,37.2 63.5,36 65,36 C 66.5,36 67.75,37.2 67.75,38.75 L 67.75,69.25 C 67.75,70.8 66.5,72 65,72 C 63.5,72 62.25,70.8 62.25,69.25 Z" />
+
+    <!-- Pilastro 5 (Destra Esterno) -->
+    <path
+        android:fillColor="#71717A"
+        android:pathData="M 72.5,46.5 C 72.5,45.1 73.6,44 75,44 C 76.4,44 77.5,45.1 77.5,46.5 L 77.5,61.5 C 77.5,62.9 76.4,64 75,64 C 73.6,64 72.5,62.9 72.5,61.5 Z" />
+
+    <!-- Accento Smeraldo -->
+    <path
+        android:fillColor="#10B981"
+        android:pathData="M 54,86 a 2.2,2.2 0 1 1 -0.01,0 Z" />
+
+</vector>
