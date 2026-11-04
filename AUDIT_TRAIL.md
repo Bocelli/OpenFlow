@@ -40,6 +40,18 @@
     - Fixed JSON parser bug: if choices were missing, it previously returned `Result.success(rawText)`, which tricked the pipeline into thinking the call succeeded and prevented fallback.
     - Removed `contextText` pollution from system prompt to stop confusing Llama with prior draft text.
     - Added explicit in-field diagnostic prefix on fallback so any API failure is immediately visible.
+  - Punctuation Rhythm, Tech Brand Orthography, and Oral Starter Removal:
+    - Analyzed user transcript tests from Groq and Gemini: both engines produced structured paragraphs with quotes and fast latency, but showed minor punctuation run-ons, coordinating conjunction starters ("E praticamente..."), and brand spelling errors ("Grok" vs "Groq", "Open AI" vs "OpenAI", "Flash Light" vs "Flash-Lite").
+    - Updated `PromptPreset.NATURAL` system prompt with:
+      - Rule 3 (Punteggiatura e Ritmo Fluido): forbids comma-splicing, mandates breaking oral run-ons with periods, colons (:), and dashes (—).
+      - Rule 4 (Eliminazione Intercalari ed Esitazioni): strictly forbids starting sentences with coordinating conjunctions like "E praticamente", "E poi", "E quindi".
+      - Rule 6 (Maiuscole e Brand Tecnologici): explicit dictionary for Groq, OpenAI, Gemini, Flash-Lite, Antigravity, OpenFlow, Wispr Flow.
+      - Integrated user's real-world dictation as canonical few-shot training example.
+    - Added deterministic post-processing in `AiPipelineClient.kt`:
+      - Automatic brand normalization (Grok -> Groq, Open AI -> OpenAI, Flash Light -> Flash-Lite, antigravity -> Antigravity).
+      - Regex stripping of oral sentence starters: `(?m)^[Ee]\s+praticamente\s*,?\s*` and `(?m)^[Pp]raticamente\s*,?\s*`.
+    - Added unit tests in `PromptPresetTest.kt` verifying brand normalization and oral starter removal (all passed).
+    - Output APK: `OpenFlow-debug.apk` (16.4 MB).
   - Handled Gemini HTTP 503 High Demand Spikes via Cascade:
     - Root cause: `gemini-3.8-flash` is experiencing temporary high demand (`HTTP 503 UNAVAILABLE`). The previous code exited early on non-404 status codes.
     - Updated `discoverActiveGeminiModels` to return the full ordered list of active models sorted by availability: prioritizing `3.5-flash-lite` (designed for massive continuous throughput without 503s), `3.5-flash`, `3.8-flash`, and `2.5-flash`.
