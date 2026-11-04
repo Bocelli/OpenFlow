@@ -18,6 +18,8 @@
   - Eliminated prompt-leak hallucination: removed Whisper prompt parameter entirely to stop ghost prefixes like "Broadcast".
   - Upgraded translation engine to Wispr God Tier: Few-shot prompting, paragraph auto-splitting (\n\n), intelligent self-correction, currency/time normalization, and temperature 0.15 on Llama 3.3 70B.
   - Implemented Wispr Narrativo Engine: literary style prompts with dynamic dialog quotes («...»), story paragraphs (\n\n), expressive punctuation, and elevated temperature 0.35 on Llama 3.3 70B.
+  - Added programmatic Kotlin post-processing: automated consecutive duplicate word removal (deduplication) and guaranteed uppercase capitalization after punctuation (. ! ? \n\n).
+  - Added on-screen Toast alerts for LLM failure transparency.
   - Compiled and verified debug APK: `app-debug.apk` (16.3 MB) ready for deployment.
   - Implemented core Android architecture:
     - `data/PreferencesManager.kt`: EncryptedSharedPreferences, OpenAI & Groq endpoints, prompt presets.

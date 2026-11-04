@@ -1,6 +1,8 @@
 package com.openflow.android.ai
 
+import android.util.Log
 import com.openflow.android.data.PreferencesManager
+import com.openflow.android.data.PromptPreset
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
@@ -15,6 +17,12 @@ import java.io.File
 import java.io.IOException
 import java.util.concurrent.TimeUnit
 
+data class PipelineOutput(
+    val text: String,
+    val isFallback: Boolean = false,
+    val errorMessage: String? = null
+)
+
 class AiPipelineClient(private val prefs: PreferencesManager) {
 
     private val httpClient: OkHttpClient = OkHttpClient.Builder()
@@ -26,7 +34,7 @@ class AiPipelineClient(private val prefs: PreferencesManager) {
     suspend fun processSpeechToPolishedText(
         audioFile: File,
         surroundingContext: String? = null
-    ): Result<String> = withContext(Dispatchers.IO) {
+    ): Result<PipelineOutput> = withContext(Dispatchers.IO) {
         val apiKey = prefs.currentApiKey
         if (apiKey.isBlank()) {
             return@withContext Result.failure(IllegalStateException("Chiave API mancante. Configurala nell'app OpenFlow."))
@@ -34,31 +42,41 @@ class AiPipelineClient(private val prefs: PreferencesManager) {
 
         val provider = prefs.activeProvider
 
-        // 1. STADIO 1: Speech-To-Text con Whisper ottimizzato
+        // 1. STADIO 1: Speech-To-Text con Whisper
         val rawTranscription = transcribeAudio(audioFile, apiKey, provider)
             .getOrElse { return@withContext Result.failure(it) }
 
         if (rawTranscription.isBlank()) {
-            return@withContext Result.success("")
+            return@withContext Result.success(PipelineOutput(text = ""))
         }
 
-        // Se l'utente ha selezionato "Trascrizione Pura (Zero IA)", salta l'LLM per massima velocità e fedeltà 1:1
-        if (prefs.activePreset == com.openflow.android.data.PromptPreset.RAW) {
-            val sanitized = sanitizeLlmOutput(rawTranscription)
-            return@withContext Result.success(sanitized)
+        Log.d(TAG, "RAW WHISPER: '$rawTranscription'")
+
+        // Se l'utente ha selezionato "Trascrizione Pura (Zero IA)", salta l'LLM
+        if (prefs.activePreset == PromptPreset.RAW) {
+            val sanitized = sanitizeAndFormatText(rawTranscription)
+            return@withContext Result.success(PipelineOutput(text = sanitized))
         }
 
         // 2. STADIO 2: Polishing e formattazione con LLM
-        val polishedText = polishTextWithLlm(rawTranscription, surroundingContext, apiKey, provider)
-            .getOrElse {
-                // shortcut: Se l'LLM fallisce (es. quota o timeout), ritorna la trascrizione grezza per non perdere l'audio
-                rawTranscription
-            }
+        val llmResult = polishTextWithLlm(rawTranscription, surroundingContext, apiKey, provider)
 
-        // Pulizia finale da eventuali residui di prefissi o virgolette
-        val cleanedText = sanitizeLlmOutput(polishedText)
+        val finalOutput = if (llmResult.isSuccess) {
+            val polished = llmResult.getOrThrow()
+            Log.d(TAG, "POLISHED LLM: '$polished'")
+            PipelineOutput(text = sanitizeAndFormatText(polished), isFallback = false)
+        } else {
+            val err = llmResult.exceptionOrNull()?.message ?: "Errore sconosciuto"
+            Log.e(TAG, "LLM FALLITO: $err. Uso fallback Whisper grezzo.", llmResult.exceptionOrNull())
+            // Fallback: pulisce comunque maiuscole e duplicazioni anche sul testo grezzo!
+            PipelineOutput(
+                text = sanitizeAndFormatText(rawTranscription),
+                isFallback = true,
+                errorMessage = err
+            )
+        }
 
-        Result.success(cleanedText)
+        Result.success(finalOutput)
     }
 
     private fun transcribeAudio(
@@ -74,15 +92,13 @@ class AiPipelineClient(private val prefs: PreferencesManager) {
             .addFormDataPart("file", audioFile.name, fileBody)
             .addFormDataPart("model", provider.asrModel)
             .addFormDataPart("response_format", "json")
-            .addFormDataPart("temperature", "0") // Determinismo puro, azzera le allucinazioni
+            .addFormDataPart("temperature", "0") // Determinismo puro
 
-        // Imposta la lingua (default "it" per eliminare ambiguità con altre lingue)
         val lang = prefs.language
         if (lang.isNotBlank() && lang != "auto") {
             multipartBuilder.addFormDataPart("language", lang)
         }
 
-        // Nessun parametro "prompt" iniettato: evita che Whisper allucini parole dal prompt (es. "broadcast")
         val request = Request.Builder()
             .url("${provider.baseUrl}/audio/transcriptions")
             .addHeader("Authorization", "Bearer $apiKey")
@@ -130,7 +146,7 @@ class AiPipelineClient(private val prefs: PreferencesManager) {
         val requestPayload = JSONObject().apply {
             put("model", provider.llmModel)
             put("messages", messagesArray)
-            put("temperature", 0.35) // Temperatura ideale per sbloccare la prosa narrativa e la punteggiatura d'autore
+            put("temperature", 0.2) // 0.2: ideale per coniugare creatività di punteggiatura e rigore grammaticale
         }
 
         val jsonMediaType = "application/json; charset=utf-8".toMediaType()
@@ -146,7 +162,7 @@ class AiPipelineClient(private val prefs: PreferencesManager) {
             val response = httpClient.newCall(request).execute()
             val responseBody = response.body?.string() ?: ""
             if (!response.isSuccessful) {
-                return Result.failure(IOException("Errore LLM HTTP ${response.code}: $responseBody"))
+                return Result.failure(IOException("HTTP ${response.code}: $responseBody"))
             }
 
             val json = JSONObject(responseBody)
@@ -163,31 +179,69 @@ class AiPipelineClient(private val prefs: PreferencesManager) {
         }
     }
 
-    private fun sanitizeLlmOutput(output: String): String {
+    /**
+     * Sanitizzazione e Garanzia di Qualità Sintattica:
+     * 1. Elimina prefissi spuri
+     * 2. Rimuove parole ripetute / balbettii consecutivi (es. "io io" -> "io")
+     * 3. Forza MAIUSCOLA dopo ogni punto fermo (. ! ?)
+     * 4. Assicura che la prima lettera del testo sia sempre maiuscola
+     * 5. Converte acustica "abici" -> "A B C"
+     */
+    fun sanitizeAndFormatText(output: String): String {
         var clean = output.trim()
+
+        // 1. Rimuove prefissi spuri
         val prefixesToRemove = listOf(
             "Broadcast:", "Broadcast :", "Broadcast",
             "Message:", "Message :", "Messaggio:", "Messaggio :",
-            "Testo:", "Testo :", "Trascrizione:", "Output:"
+            "Testo:", "Testo :", "Trascrizione:", "Output:",
+            "Ecco il testo:", "Ecco la trascrizione:"
         )
         for (prefix in prefixesToRemove) {
             if (clean.startsWith(prefix, ignoreCase = true)) {
                 clean = clean.substring(prefix.length).trim()
             }
         }
-        // Rimuove eventuali blocchi di codice markdown ```text ... ``` se il modello dovesse usarli
+
+        // 2. Rimuove blocchi markdown ```text ... ```
         if (clean.startsWith("```") && clean.endsWith("```")) {
             clean = clean.substringAfter("\n").substringBeforeLast("```").trim()
         }
 
-        // Rimuove eventuali virgolette all'inizio e alla fine
-        if (clean.startsWith("\"") && clean.endsWith("\"") && clean.length > 1) {
+        // 3. Rimuove virgolette esterne superflue se racchiudono tutto il blocco
+        if (clean.startsWith("\"") && clean.endsWith("\"") && clean.count { it == '"' } == 2) {
             clean = clean.substring(1, clean.length - 1).trim()
         }
 
-        // Correzione fonetica specifica per lo spelling delle lettere ("abici" / "a bici" -> "A B C")
+        // 4. Correzione fonetica per lo spelling ("abici" / "a bici" -> "A B C")
         clean = clean.replace(Regex("""\b(abici|abbiccì|a\s+bici)\b""", RegexOption.IGNORE_CASE), "A B C")
 
+        // 5. Deduplicazione automatica parole consecutive (elimina balbettii intenzionali o involontari)
+        // Ripete finché non ci sono più parole doppie consecutive
+        val duplicateRegex = Regex("""\b(\w+)\s+\1\b""", RegexOption.IGNORE_CASE)
+        while (duplicateRegex.containsMatchIn(clean)) {
+            clean = clean.replace(duplicateRegex) { match -> match.groupValues[1] }
+        }
+
+        // 6. Forza MAIUSCOLA dopo ogni punto (. ! ? o a capo)
+        clean = clean.replace(Regex("""([.!?]\s+)([a-zàèéìòù])""")) { match ->
+            match.groupValues[1] + match.groupValues[2].uppercase()
+        }
+
+        // 7. Forza MAIUSCOLA dopo doppio a capo (\n\n)
+        clean = clean.replace(Regex("""(\n+\s*)([a-zàèéìòù])""")) { match ->
+            match.groupValues[1] + match.groupValues[2].uppercase()
+        }
+
+        // 8. Prima lettera dell'intero testo sempre maiuscola
+        if (clean.isNotEmpty()) {
+            clean = clean.replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() }
+        }
+
         return clean.trim()
+    }
+
+    companion object {
+        private const val TAG = "AiPipelineClient"
     }
 }

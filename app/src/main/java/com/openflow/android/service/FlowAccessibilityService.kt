@@ -146,9 +146,18 @@ class FlowAccessibilityService : AccessibilityService() {
             val response = aiClient.processSpeechToPolishedText(recordedFile, currentContextText)
             recordedFile.delete()
 
-            response.onSuccess { polishedText ->
-                if (polishedText.isNotBlank()) {
-                    insertTextIntoActiveField(polishedText)
+            response.onSuccess { output ->
+                if (output.isFallback && output.errorMessage != null) {
+                    mainHandler.post {
+                        android.widget.Toast.makeText(
+                            applicationContext,
+                            "⚠️ Fallito LLM (${output.errorMessage}): mostro testo grezzo",
+                            android.widget.Toast.LENGTH_LONG
+                        ).show()
+                    }
+                }
+                if (output.text.isNotBlank()) {
+                    insertTextIntoActiveField(output.text)
                     bubbleOverlay?.updateState(BubbleState.SUCCESS)
                 } else {
                     bubbleOverlay?.updateState(BubbleState.IDLE)
