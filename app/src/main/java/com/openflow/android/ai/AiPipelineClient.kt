@@ -131,10 +131,17 @@ class AiPipelineClient(private val prefs: PreferencesManager) {
         var lastError: Exception? = null
         for (modelName in candidateModels) {
             val path = if (modelName.startsWith("models/")) modelName else "models/$modelName"
+            val vocab = prefs.customVocabulary
+            val systemInstruction = if (vocab.isNotBlank()) {
+                "${prefs.activePreset.prompt}\n\nGLOSSARIO E TERMINI PERSONALIZZATI (usa sempre l'ortografia esatta di questi nomi/termini):\n$vocab"
+            } else {
+                prefs.activePreset.prompt
+            }
+
             val payload = JSONObject().apply {
                 put("system_instruction", JSONObject().apply {
                     put("parts", JSONArray().apply {
-                        put(JSONObject().apply { put("text", prefs.activePreset.prompt) })
+                        put(JSONObject().apply { put("text", systemInstruction) })
                     })
                 })
                 put("contents", JSONArray().apply {
@@ -281,6 +288,11 @@ class AiPipelineClient(private val prefs: PreferencesManager) {
             multipartBuilder.addFormDataPart("language", lang)
         }
 
+        val vocab = prefs.customVocabulary
+        if (vocab.isNotBlank()) {
+            multipartBuilder.addFormDataPart("prompt", vocab)
+        }
+
         val request = Request.Builder()
             .url("${provider.baseUrl}/audio/transcriptions")
             .addHeader("Authorization", "Bearer $apiKey")
@@ -384,7 +396,12 @@ class AiPipelineClient(private val prefs: PreferencesManager) {
         modelName: String
     ): Result<String> {
         val preset = prefs.activePreset
-        val systemInstruction = preset.prompt
+        val vocab = prefs.customVocabulary
+        val systemInstruction = if (vocab.isNotBlank()) {
+            "${preset.prompt}\n\nGLOSSARIO E TERMINI PERSONALIZZATI (preserva e usa sempre l'ortografia esatta di questi nomi/termini):\n$vocab"
+        } else {
+            preset.prompt
+        }
 
         val messagesArray = JSONArray().apply {
             put(JSONObject().apply {

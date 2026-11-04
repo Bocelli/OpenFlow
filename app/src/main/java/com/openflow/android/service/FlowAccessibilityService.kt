@@ -13,7 +13,6 @@ import android.os.Looper
 import android.util.Log
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
-import android.view.accessibility.AccessibilityWindowInfo
 import com.openflow.android.ai.AiPipelineClient
 import com.openflow.android.audio.AudioRecorderManager
 import com.openflow.android.data.PreferencesManager
@@ -37,50 +36,9 @@ class FlowAccessibilityService : AccessibilityService() {
     private var activeTargetNode: AccessibilityNodeInfo? = null
     private var currentContextText: String? = null
 
-    private val checkWindowFocusRunnable = Runnable {
-        try {
-            val keyboardOpen = isKeyboardVisible()
-            val input = findActiveFocusedInput()
-
-            if (keyboardOpen || input != null) {
-                Log.d(TAG, "checkWindowFocus: tastiera o input attivo (kb=$keyboardOpen, input=${input?.className})")
-                mainHandler.removeCallbacks(hideBubbleRunnable)
-                if (input != null) {
-                    updateActiveTarget(input)
-                    input.recycle()
-                }
-                ensureOverlayInitialized()
-                if (prefs.showOnlyWhenFocused) {
-                    bubbleOverlay?.show()
-                }
-            } else {
-                Log.d(TAG, "checkWindowFocus: nessun input attivo né tastiera")
-                scheduleHideBubbleIfIdle()
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "Errore checkWindowFocus: ${e.message}", e)
-        }
-    }
-
-    private fun isKeyboardVisible(): Boolean {
-        try {
-            val winList = windows
-            for (win in winList) {
-                if (win.type == AccessibilityWindowInfo.TYPE_INPUT_METHOD) {
-                    val rect = android.graphics.Rect()
-                    win.getBoundsInScreen(rect)
-                    if (rect.height() > 100) {
-                        return true
-                    }
-                }
-            }
-        } catch (_: Exception) {}
-        return false
-    }
-
     private val hideBubbleRunnable = Runnable {
         if (prefs.showOnlyWhenFocused && bubbleOverlay?.currentState == BubbleState.IDLE) {
-            Log.d(TAG, "Esecuzione hideBubble (nessun campo attivo)")
+            Log.d(TAG, "hideBubble: nascondo bolla")
             bubbleOverlay?.hide()
         }
     }
@@ -99,7 +57,6 @@ class FlowAccessibilityService : AccessibilityService() {
         instance = this
         Log.d(TAG, "FlowAccessibilityService onServiceConnected!")
 
-        // Configura gli eventi necessari senza floodare l'IPC di sistema
         val info = serviceInfo ?: AccessibilityServiceInfo()
         info.eventTypes = AccessibilityEvent.TYPE_VIEW_FOCUSED or
                 AccessibilityEvent.TYPE_VIEW_CLICKED or
@@ -108,14 +65,11 @@ class FlowAccessibilityService : AccessibilityService() {
         info.feedbackType = AccessibilityServiceInfo.FEEDBACK_GENERIC
         info.flags = AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS or
                 AccessibilityServiceInfo.FLAG_REPORT_VIEW_IDS
-        info.notificationTimeout = 100
+        info.notificationTimeout = 80
         serviceInfo = info
 
         initBubbleOverlay()
-
-        if (!prefs.showOnlyWhenFocused) {
-            bubbleOverlay?.show()
-        }
+        bubbleOverlay?.show()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -139,6 +93,10 @@ class FlowAccessibilityService : AccessibilityService() {
         }
     }
 
+    fun isBubbleVisible(): Boolean {
+        return bubbleOverlay?.isVisible == true
+    }
+
     private fun initBubbleOverlay() {
         if (bubbleOverlay == null) {
             bubbleOverlay = FloatingBubbleOverlay(
@@ -153,132 +111,49 @@ class FlowAccessibilityService : AccessibilityService() {
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
-        if (event == null) return
-        if (event.packageName == packageName) return
+        if (event == null || event.packageName == packageName) return
 
-        when (event.eventType) {
-            AccessibilityEvent.TYPE_VIEW_FOCUSED,
-            AccessibilityEvent.TYPE_VIEW_CLICKED,
-            AccessibilityEvent.TYPE_VIEW_TEXT_SELECTION_CHANGED -> {
-                val source = event.source ?: return
-                try {
-                    val inputNode = findInputField(source)
-                    if (inputNode != null) {
-                        Log.d(TAG, "Rilevato campo di testo: ${inputNode.className} (editable=${inputNode.isEditable})")
-                        mainHandler.removeCallbacks(hideBubbleRunnable)
-                        updateActiveTarget(inputNode)
-                        inputNode.recycle()
-                        ensureOverlayInitialized()
-                        if (prefs.showOnlyWhenFocused) {
-                            bubbleOverlay?.show()
-                        }
-                    } else if (event.eventType == AccessibilityEvent.TYPE_VIEW_CLICKED) {
-                        // Tocco fuori dal campo di testo
-                        scheduleHideBubbleIfIdle()
-                    }
-                } finally {
-                    try { source.recycle() } catch (_: Exception) {}
-                }
-            }
+        val pkg = event.packageName?.toString()?.lowercase() ?: ""
+        val cls = event.className?.toString() ?: ""
+        val source = event.source
 
-            AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED -> {
-                // Quando si cambia finestra o compare la tastiera, verifica con leggero debounce
-                mainHandler.removeCallbacks(checkWindowFocusRunnable)
-                mainHandler.postDelayed(checkWindowFocusRunnable, 180)
-            }
-        }
-    }
-
-    /**
-     * Cerca l'effettivo nodo di input, controllando anche i figli
-     * (es. WhatsApp o Compose racchiudono l'EditText dentro ViewGroup/LinearLayout).
-     */
-    private fun findInputField(node: AccessibilityNodeInfo?): AccessibilityNodeInfo? {
-        if (node == null) return null
-        if (isLikelyInputField(node)) {
-            return AccessibilityNodeInfo.obtain(node)
-        }
-        // Cerca nei figli diretti
-        val count = node.childCount.coerceAtMost(8)
-        for (i in 0 until count) {
-            val child = node.getChild(i) ?: continue
-            if (isLikelyInputField(child)) {
-                return child
-            }
-            // Ispeziona un ulteriore livello (container annidato)
-            val subCount = child.childCount.coerceAtMost(6)
-            for (j in 0 until subCount) {
-                val subChild = child.getChild(j) ?: continue
-                if (isLikelyInputField(subChild)) {
-                    child.recycle()
-                    return subChild
-                }
-                subChild.recycle()
-            }
-            child.recycle()
-        }
-        return null
-    }
-
-    /**
-     * Trova il campo con focus di input anche quando la tastiera (IME) è attiva in primo piano.
-     */
-    private fun findActiveFocusedInput(): AccessibilityNodeInfo? {
-        // 1. Prova prima con la finestra attiva standard
         try {
-            val root = rootInActiveWindow
-            if (root != null) {
-                val focused = root.findFocus(AccessibilityNodeInfo.FOCUS_INPUT)
-                root.recycle()
-                if (focused != null) {
-                    if (isLikelyInputField(focused)) return focused
-                    val child = findInputField(focused)
-                    focused.recycle()
-                    if (child != null) return child
+            // 1. Se l'utente torna alla Home o nel Launcher -> Nascondi la bolla
+            val isHomeOrLauncher = pkg.contains("launcher") || pkg.contains("home")
+            if (isHomeOrLauncher && event.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
+                Log.d(TAG, "--> Home/Launcher attivo, nascondo bolla: pkg=$pkg")
+                scheduleHideBubbleIfIdle(delayMs = 250)
+                return
+            }
+
+            // 2. Se è attiva la tastiera (GBoard, SwiftKey, ecc.) o un campo editabile / focus di testo
+            val isIme = pkg.contains("inputmethod") || pkg.contains("keyboard") || pkg.contains(".ime")
+            val isEditable = (source?.isEditable == true) ||
+                    cls.contains("EditText", ignoreCase = true) ||
+                    cls.contains("TextField", ignoreCase = true) ||
+                    cls.contains("AutoCompleteTextView", ignoreCase = true)
+
+            if (isIme || isEditable) {
+                Log.d(TAG, "--> MATCH SHOW: isIme=$isIme, isEditable=$isEditable (pkg=$pkg, cls=$cls)")
+                mainHandler.removeCallbacks(hideBubbleRunnable)
+                if (source != null && source.isEditable) {
+                    updateActiveTarget(source)
+                }
+                ensureOverlayInitialized()
+                if (prefs.showOnlyWhenFocused) {
+                    bubbleOverlay?.show()
                 }
             }
-        } catch (_: Exception) {}
-
-        // 2. Se la finestra attiva è la tastiera di sistema, cerca nella finestra dell'app sottostante
-        try {
-            val windowList = windows
-            for (win in windowList) {
-                if (win.type == AccessibilityWindowInfo.TYPE_APPLICATION) {
-                    val root = win.root ?: continue
-                    val focused = root.findFocus(AccessibilityNodeInfo.FOCUS_INPUT)
-                    root.recycle()
-                    if (focused != null) {
-                        if (isLikelyInputField(focused)) return focused
-                        val child = findInputField(focused)
-                        focused.recycle()
-                        if (child != null) return child
-                    }
-                }
-            }
-        } catch (_: Exception) {}
-
-        return null
+        } finally {
+            try { source?.recycle() } catch (_: Exception) {}
+        }
     }
 
-    private fun scheduleHideBubbleIfIdle() {
+    private fun scheduleHideBubbleIfIdle(delayMs: Long = 350) {
         if (prefs.showOnlyWhenFocused && bubbleOverlay?.currentState == BubbleState.IDLE) {
             mainHandler.removeCallbacks(hideBubbleRunnable)
-            mainHandler.postDelayed(hideBubbleRunnable, 400)
+            mainHandler.postDelayed(hideBubbleRunnable, delayMs)
         }
-    }
-
-    private fun isLikelyInputField(node: AccessibilityNodeInfo?): Boolean {
-        if (node == null) return false
-        if (node.isEditable) return true
-        val className = node.className?.toString() ?: return false
-        val lowerClass = className.lowercase()
-        return lowerClass.contains("edittext") ||
-                lowerClass.contains("autocompletetextview") ||
-                lowerClass.contains("searchautocompletetextview") ||
-                lowerClass.contains("extractedittext") ||
-                lowerClass.contains("textfield") ||
-                lowerClass.contains("textinput") ||
-                (lowerClass.contains("composeview") && node.isFocusable)
     }
 
     private fun updateActiveTarget(node: AccessibilityNodeInfo) {
@@ -324,6 +199,13 @@ class FlowAccessibilityService : AccessibilityService() {
                 if (textToInsert.isNotBlank()) {
                     insertTextIntoActiveField(textToInsert)
                     bubbleOverlay?.updateState(BubbleState.SUCCESS)
+                    try {
+                        com.openflow.android.data.TranscriptionHistoryManager(this@FlowAccessibilityService).add(
+                            text = textToInsert,
+                            provider = prefs.activeProvider.name,
+                            preset = prefs.activePreset.name
+                        )
+                    } catch (_: Exception) {}
                 } else {
                     bubbleOverlay?.updateState(BubbleState.IDLE)
                 }
@@ -340,8 +222,14 @@ class FlowAccessibilityService : AccessibilityService() {
         var needsRecycleTarget = false
 
         if (target == null || !target.isEditable) {
-            target = findActiveFocusedInput()
-            needsRecycleTarget = true
+            try {
+                val root = rootInActiveWindow
+                if (root != null) {
+                    target = root.findFocus(AccessibilityNodeInfo.FOCUS_INPUT)
+                    needsRecycleTarget = true
+                    root.recycle()
+                }
+            } catch (_: Exception) {}
         }
 
         if (target == null || !target.isEditable) {

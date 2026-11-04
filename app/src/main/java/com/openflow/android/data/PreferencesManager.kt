@@ -171,15 +171,20 @@ class PreferencesManager(context: Context) {
         set(value) = prefs.edit().putString(KEY_LANGUAGE, value).apply()
 
     var showOnlyWhenFocused: Boolean
-        get() {
-            if (!prefs.contains(KEY_SHOW_ONLY_WHEN_FOCUSED_V2)) {
-                // Imposta sempre true di default per garantire la scomparsa automatica
-                prefs.edit().putBoolean(KEY_SHOW_ONLY_WHEN_FOCUSED_V2, true).apply()
-                return true
-            }
-            return prefs.getBoolean(KEY_SHOW_ONLY_WHEN_FOCUSED_V2, true)
-        }
+        get() = prefs.getBoolean(KEY_SHOW_ONLY_WHEN_FOCUSED_V2, false)
         set(value) = prefs.edit().putBoolean(KEY_SHOW_ONLY_WHEN_FOCUSED_V2, value).apply()
+
+    var hasCompletedOnboarding: Boolean
+        get() = prefs.getBoolean(KEY_ONBOARDING_DONE, false)
+        set(value) = prefs.edit().putBoolean(KEY_ONBOARDING_DONE, value).apply()
+
+    var customVocabulary: String
+        get() = prefs.getString(KEY_CUSTOM_VOCABULARY, "Michele, OpenFlow, Wispr Flow, Antigravity") ?: "Michele, OpenFlow, Wispr Flow, Antigravity"
+        set(value) = prefs.edit().putString(KEY_CUSTOM_VOCABULARY, value.trim()).apply()
+
+    var stealthModeEnabled: Boolean
+        get() = prefs.getBoolean(KEY_STEALTH_MODE, true)
+        set(value) = prefs.edit().putBoolean(KEY_STEALTH_MODE, value).apply()
 
     var hapticFeedbackEnabled: Boolean
         get() = prefs.getBoolean(KEY_HAPTIC_ENABLED, true)
@@ -204,5 +209,8 @@ class PreferencesManager(context: Context) {
         private const val KEY_SHOW_ONLY_WHEN_FOCUSED = "key_show_focused"
         private const val KEY_SHOW_ONLY_WHEN_FOCUSED_V2 = "key_show_focused_v2"
         private const val KEY_HAPTIC_ENABLED = "key_haptic_feedback"
+        private const val KEY_ONBOARDING_DONE = "key_onboarding_completed"
+        private const val KEY_CUSTOM_VOCABULARY = "key_custom_vocabulary"
+        private const val KEY_STEALTH_MODE = "key_stealth_mode"
     }
 }

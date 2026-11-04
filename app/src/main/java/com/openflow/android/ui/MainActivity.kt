@@ -34,6 +34,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -78,7 +79,26 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             OpenFlowTheme {
-                MainSettingsScreen(prefs = prefs, resumeTrigger = resumeCount.value)
+                var showOnboarding by remember { mutableStateOf(!prefs.hasCompletedOnboarding) }
+                if (showOnboarding) {
+                    OnboardingWizard(
+                        prefs = prefs,
+                        resumeTrigger = resumeCount.value,
+                        onComplete = {
+                            prefs.hasCompletedOnboarding = true
+                            showOnboarding = false
+                            if (FlowAccessibilityService.instance != null && !prefs.showOnlyWhenFocused) {
+                                FlowAccessibilityService.instance?.triggerShowBubble()
+                            }
+                        }
+                    )
+                } else {
+                    MainSettingsScreen(
+                        prefs = prefs,
+                        resumeTrigger = resumeCount.value,
+                        onOpenOnboarding = { showOnboarding = true }
+                    )
+                }
             }
         }
     }
@@ -104,7 +124,11 @@ fun OpenFlowTheme(content: @Composable () -> Unit) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun MainSettingsScreen(prefs: PreferencesManager, resumeTrigger: Int = 0) {
+fun MainSettingsScreen(
+    prefs: PreferencesManager,
+    resumeTrigger: Int = 0,
+    onOpenOnboarding: () -> Unit = {}
+) {
     val context = LocalContext.current
     val clipboard = remember { context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager }
 
@@ -125,8 +149,11 @@ fun MainSettingsScreen(prefs: PreferencesManager, resumeTrigger: Int = 0) {
     var selectedLanguage by remember { mutableStateOf(prefs.language) }
     var activePreset by remember { mutableStateOf(prefs.activePreset) }
     var showOnlyWhenFocused by remember { mutableStateOf(prefs.showOnlyWhenFocused) }
+    var stealthModeEnabled by remember { mutableStateOf(prefs.stealthModeEnabled) }
+    var customVocabulary by remember { mutableStateOf(prefs.customVocabulary) }
     var hapticEnabled by remember { mutableStateOf(prefs.hapticFeedbackEnabled) }
     var isKeyVisible by remember { mutableStateOf(false) }
+    var showHistoryVault by remember { mutableStateOf(false) }
 
     val micLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
@@ -213,6 +240,16 @@ fun MainSettingsScreen(prefs: PreferencesManager, resumeTrigger: Int = 0) {
                                 color = statusText
                             )
                         }
+                    }
+                },
+                actions = {
+                    IconButton(onClick = { showHistoryVault = true }) {
+                        Icon(
+                            imageVector = Icons.Default.History,
+                            contentDescription = "History Vault",
+                            tint = TextSecondary,
+                            modifier = Modifier.size(22.dp)
+                        )
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = CanvasBg)
@@ -483,7 +520,73 @@ fun MainSettingsScreen(prefs: PreferencesManager, resumeTrigger: Int = 0) {
                 )
             }
 
-            // 5. Opzioni Comportamento
+            // 5. Vocabolario Personalizzato (Glossary)
+            item {
+                SectionHeader(title = "VOCABOLARIO PERSONALIZZATO")
+                Spacer(modifier = Modifier.height(6.dp))
+
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(CardBg)
+                        .border(1.dp, HairlineBorder, RoundedCornerShape(14.dp))
+                        .padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Text(
+                        text = "Termini, brand, modelli hardware e nomi che non devono mai essere storpiati dai modelli Whisper o LLM (separati da virgole).",
+                        fontSize = 12.sp,
+                        color = TextSecondary,
+                        lineHeight = 16.5.sp
+                    )
+
+                    OutlinedTextField(
+                        value = customVocabulary,
+                        onValueChange = {
+                            customVocabulary = it
+                            prefs.customVocabulary = it
+                        },
+                        placeholder = { Text("Michele, OpenFlow, Wispr Flow, 5800X3D...") },
+                        modifier = Modifier.fillMaxWidth(),
+                        maxLines = 4,
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = HairlineBorderFocus,
+                            unfocusedBorderColor = HairlineBorder,
+                            focusedContainerColor = CardElevated,
+                            unfocusedContainerColor = CardElevated,
+                            cursorColor = TextPrimary
+                        ),
+                        shape = RoundedCornerShape(10.dp)
+                    )
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "Iniettato in Whisper prompt & LLM",
+                            fontSize = 11.sp,
+                            color = TextMuted
+                        )
+                        if (customVocabulary != "Michele, OpenFlow, Wispr Flow, Antigravity") {
+                            Text(
+                                text = "Ripristina predefiniti",
+                                fontSize = 11.sp,
+                                color = StatusEmerald,
+                                modifier = Modifier.clickable {
+                                    val defaultVocab = "Michele, OpenFlow, Wispr Flow, Antigravity"
+                                    customVocabulary = defaultVocab
+                                    prefs.customVocabulary = defaultVocab
+                                }
+                            )
+                        }
+                    }
+                }
+            }
+
+            // 6. Opzioni Comportamento
             item {
                 SectionHeader(title = "COMPORTAMENTO OVERLAY")
                 Spacer(modifier = Modifier.height(6.dp))
@@ -514,6 +617,18 @@ fun MainSettingsScreen(prefs: PreferencesManager, resumeTrigger: Int = 0) {
                     HorizontalDivider(color = HairlineBorder.copy(alpha = 0.6f), thickness = 1.dp)
 
                     SwitchSettingRow(
+                        title = "Stealth Mode (Auto-dim)",
+                        subtitle = "Sfuma l'opacità al 28% dopo 3.5s in idle per non coprire i contenuti",
+                        checked = stealthModeEnabled,
+                        onCheckedChange = {
+                            stealthModeEnabled = it
+                            prefs.stealthModeEnabled = it
+                        }
+                    )
+
+                    HorizontalDivider(color = HairlineBorder.copy(alpha = 0.6f), thickness = 1.dp)
+
+                    SwitchSettingRow(
                         title = "Feedback Aptico",
                         subtitle = "Vibrazione tattile discreta all'avvio e rilascio",
                         checked = hapticEnabled,
@@ -523,9 +638,90 @@ fun MainSettingsScreen(prefs: PreferencesManager, resumeTrigger: Int = 0) {
                         }
                     )
                 }
-
-                Spacer(modifier = Modifier.height(28.dp))
             }
+
+            // 7. Strumenti & Guida
+            item {
+                SectionHeader(title = "STRUMENTI & GUIDA")
+                Spacer(modifier = Modifier.height(6.dp))
+
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(CardBg)
+                        .border(1.dp, HairlineBorder, RoundedCornerShape(14.dp))
+                        .padding(horizontal = 16.dp, vertical = 6.dp)
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { showHistoryVault = true }
+                            .padding(vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "History Vault (Cronologia Trascrizioni)",
+                                fontWeight = FontWeight.Medium,
+                                color = TextPrimary,
+                                fontSize = 14.sp
+                            )
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                text = "Consulta, copia o elimina gli ultimi 50 vocali salvati offline",
+                                color = TextSecondary,
+                                fontSize = 12.sp
+                            )
+                        }
+                        Icon(
+                            imageVector = Icons.Default.History,
+                            contentDescription = null,
+                            tint = TextSecondary,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+
+                    HorizontalDivider(color = HairlineBorder.copy(alpha = 0.6f), thickness = 1.dp)
+
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onOpenOnboarding() }
+                            .padding(vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Rivedi Configurazione Guidata",
+                                fontWeight = FontWeight.Medium,
+                                color = TextPrimary,
+                                fontSize = 14.sp
+                            )
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                text = "Riapri la procedura passo-passo e la guida ai gesti della bolla",
+                                color = TextSecondary,
+                                fontSize = 12.sp
+                            )
+                        }
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                            contentDescription = null,
+                            tint = TextSecondary,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(32.dp))
+            }
+        }
+
+        if (showHistoryVault) {
+            HistoryVaultSheet(onDismiss = { showHistoryVault = false })
         }
     }
 }
