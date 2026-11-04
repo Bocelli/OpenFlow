@@ -36,6 +36,7 @@ class FlowAccessibilityService : AccessibilityService() {
     private lateinit var audioRecorder: AudioRecorderManager
     private lateinit var aiClient: AiPipelineClient
     private var bubbleOverlay: FloatingBubbleOverlay? = null
+    private var currentProcessingJob: Job? = null
 
     private var activeTargetNode: AccessibilityNodeInfo? = null
 
@@ -139,6 +140,8 @@ class FlowAccessibilityService : AccessibilityService() {
                 onCancelRecording = {
                     stopAudioRecordService()
                     audioRecorder.cancelRecording()
+                    currentProcessingJob?.cancel()
+                    currentProcessingJob = null
                 },
                 getAmplitude = { audioRecorder.getMaxAmplitude() }
             )
@@ -151,6 +154,14 @@ class FlowAccessibilityService : AccessibilityService() {
         val pkg = event.packageName?.toString()?.lowercase() ?: ""
         val cls = event.className?.toString() ?: ""
         val source = event.source
+
+        // Protezione Tapjacking e Privacy: nasconde l'overlay su app bancarie, password manager e schermate permessi
+        if (isSensitivePackage(pkg)) {
+            mainHandler.removeCallbacks(hideBubbleRunnable)
+            bubbleOverlay?.hide()
+            try { source?.recycle() } catch (_: Exception) {}
+            return
+        }
 
         try {
             ensureOverlayInitialized()
@@ -226,7 +237,25 @@ class FlowAccessibilityService : AccessibilityService() {
      * Rileva se un nodo o una classe rappresenta un campo di testo o un input interattivo.
      * Compatibile con Facebook (Litho/React), BlueMail (WebViews), YouTube, WhatsApp, Telegram, ecc.
      */
+    private fun isSensitivePackage(pkg: String): Boolean {
+        if (pkg.isBlank()) return false
+        return pkg.contains("permissioncontroller") ||
+                pkg.contains("packageinstaller") ||
+                pkg.contains("authenticator") ||
+                pkg.contains("bank") ||
+                pkg.contains("poste") ||
+                pkg.contains("wallet") ||
+                pkg.contains("keychain") ||
+                pkg.contains("keepass") ||
+                pkg.contains("bitwarden") ||
+                pkg.contains("1password")
+    }
+
     private fun isNodeInputCapable(source: AccessibilityNodeInfo?, cls: String, pkg: String): Boolean {
+        if (isSensitivePackage(pkg)) return false
+        if (source?.isPassword == true) return false
+        if (cls.contains("Password", ignoreCase = true) || cls.contains("PinEntry", ignoreCase = true)) return false
+
         if (pkg.contains("inputmethod") || pkg.contains("keyboard") || pkg.contains(".ime")) {
             return true
         }
@@ -266,16 +295,21 @@ class FlowAccessibilityService : AccessibilityService() {
             val root = rootInActiveWindow ?: return null
             val rootPkg = root.packageName?.toString()?.lowercase() ?: ""
 
-            // Se l'utente è sulla schermata Home (launcher) o sulla schermata di blocco/tendina,
-            // nessun campo di testo è attivo per la scrittura.
-            if (rootPkg.contains("launcher") || rootPkg.contains("globallauncher") || rootPkg.contains("systemui")) {
+            // Se l'utente è su un'app sensibile, sulla schermata Home o tendina di sistema, nessun campo è attivo
+            if (isSensitivePackage(rootPkg) || rootPkg.contains("launcher") || rootPkg.contains("globallauncher") || rootPkg.contains("systemui")) {
                 root.recycle()
                 return null
             }
 
             val input = root.findFocus(AccessibilityNodeInfo.FOCUS_INPUT)
             root.recycle()
-            if (input != null) return input
+            if (input != null) {
+                if (input.isPassword) {
+                    input.recycle()
+                    return null
+                }
+                return input
+            }
         } catch (_: Exception) {}
 
         return null
@@ -316,7 +350,8 @@ class FlowAccessibilityService : AccessibilityService() {
             return
         }
 
-        serviceScope.launch {
+        currentProcessingJob?.cancel()
+        currentProcessingJob = serviceScope.launch {
             // Qualsiasi eccezione imprevista (es. header non valido) senza questo catch crasha l'app
             // e lascia la bolla bloccata su PROCESSING.
             val response: Result<PipelineOutput> = try {
@@ -335,24 +370,25 @@ class FlowAccessibilityService : AccessibilityService() {
                 }
 
                 if (output.text.isBlank()) {
-                    // Gemini fallito (nessun testo) oppure registrazione vuota
                     bubbleOverlay?.updateState(if (output.errorMessage != null) BubbleState.ERROR else BubbleState.IDLE)
                     return@onSuccess
                 }
 
-                // Il dettaglio dell'errore sta nella notifica: nel campo (cioè nel messaggio che l'utente
-                // potrebbe inviare) e nella cronologia va solo un marcatore breve.
-                insertTextIntoActiveField(
+                val wasPassword = insertTextIntoActiveField(
                     if (output.isFallback) "[⚠️ Fallback Whisper: LLM non disponibile]\n\n${output.text}" else output.text
                 )
                 bubbleOverlay?.updateState(BubbleState.SUCCESS)
-                try {
-                    com.openflow.android.data.TranscriptionHistoryManager(this@FlowAccessibilityService).add(
-                        text = output.text,
-                        provider = prefs.activeProvider.name,
-                        preset = prefs.activePreset.name
-                    )
-                } catch (_: Exception) {}
+
+                // Salva nella cronologia locale SOLO se NON era un campo password/sensibile
+                if (!wasPassword) {
+                    try {
+                        com.openflow.android.data.TranscriptionHistoryManager(this@FlowAccessibilityService).add(
+                            text = output.text,
+                            provider = prefs.activeProvider.name,
+                            preset = prefs.activePreset.name
+                        )
+                    } catch (_: Exception) {}
+                }
             }.onFailure { error ->
                 Log.e(TAG, "Errore AI Pipeline: ${error.message}", error)
                 showNotificationAlert("❌ OpenFlow: Errore Registrazione/AI", error.message ?: "Errore sconosciuto")
@@ -361,16 +397,10 @@ class FlowAccessibilityService : AccessibilityService() {
         }
     }
 
-    private suspend fun insertTextIntoActiveField(newText: String) {
-        // Salvagente universale: copia sempre il testo formattato negli appunti
-        copyToClipboard(newText)
-
-        // Retry loop con ritardi progressivi (0ms, 85ms, 170ms)
-        // Risolve alla radice il problema delle trascrizioni brevi ("Ok", "Sì"):
-        // evita la race condition dove la risposta del modello arriva in ~200ms prima
-        // che la finestra sottostante (WhatsApp, Facebook, Gboard) abbia ripreso il focus di input.
+    private suspend fun insertTextIntoActiveField(newText: String): Boolean {
         val retryDelays = listOf(0L, 85L, 170L)
         var successfullyInserted = false
+        var isPasswordField = false
 
         for ((attemptIndex, delayMs) in retryDelays.withIndex()) {
             if (delayMs > 0) {
@@ -385,7 +415,7 @@ class FlowAccessibilityService : AccessibilityService() {
                 val root = rootInActiveWindow
                 if (root != null) {
                     val rootPkg = root.packageName?.toString()?.lowercase() ?: ""
-                    if (!rootPkg.contains("launcher") && !rootPkg.contains("globallauncher") && !rootPkg.contains("systemui")) {
+                    if (!isSensitivePackage(rootPkg) && !rootPkg.contains("launcher") && !rootPkg.contains("globallauncher") && !rootPkg.contains("systemui")) {
                         val focused = root.findFocus(AccessibilityNodeInfo.FOCUS_INPUT)
                             ?: root.findFocus(AccessibilityNodeInfo.FOCUS_ACCESSIBILITY)
                         if (focused != null) {
@@ -424,6 +454,10 @@ class FlowAccessibilityService : AccessibilityService() {
                     continue
                 }
 
+                if (target.isPassword || target.className?.contains("Password", ignoreCase = true) == true) {
+                    isPasswordField = true
+                }
+
                 // RIPRISTINO DEL FOCUS: essenziale per far accettare ACTION_SET_TEXT e ACTION_PASTE
                 if (!target.isFocused) {
                     target.performAction(AccessibilityNodeInfo.ACTION_FOCUS)
@@ -442,7 +476,7 @@ class FlowAccessibilityService : AccessibilityService() {
                 }
                 var inserted = target.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, arguments)
 
-                // Tentativo 2: Fallback diretto ACTION_PASTE (indispensabile per WebViews di BlueMail, React Native di Facebook, YouTube)
+                // Tentativo 2: Fallback diretto ACTION_PASTE
                 if (!inserted) {
                     inserted = target.performAction(AccessibilityNodeInfo.ACTION_PASTE)
                 }
@@ -463,9 +497,15 @@ class FlowAccessibilityService : AccessibilityService() {
             }
         }
 
-        if (!successfullyInserted) {
-            Log.w(TAG, "Inserimento diretto non riuscito dopo tutti i tentativi: il testo rimane pronto negli appunti della tastiera.")
+        // Salvagente universale appunti: NON copiare se era un campo password
+        if (!isPasswordField) {
+            copyToClipboard(newText)
         }
+
+        if (!successfullyInserted) {
+            Log.w(TAG, "Inserimento diretto non riuscito dopo tutti i tentativi.")
+        }
+        return isPasswordField
     }
 
     private fun getSanitizedFieldText(node: AccessibilityNodeInfo?): String {
@@ -580,8 +620,22 @@ class FlowAccessibilityService : AccessibilityService() {
         stopAudioRecordService()
     }
 
+    override fun onConfigurationChanged(newConfig: android.content.res.Configuration) {
+        super.onConfigurationChanged(newConfig)
+        if (newConfig.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE) {
+            bubbleOverlay?.hide()
+        } else {
+            bubbleOverlay?.updateNotchPosition()
+            if (!prefs.showOnlyWhenFocused) {
+                bubbleOverlay?.show()
+            }
+        }
+    }
+
     override fun onDestroy() {
         instance = null
+        currentProcessingJob?.cancel()
+        currentProcessingJob = null
         serviceScope.cancel()
         mainHandler.removeCallbacksAndMessages(null)
         bubbleOverlay?.destroy()

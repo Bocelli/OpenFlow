@@ -144,6 +144,9 @@ class FloatingBubbleOverlay(
     }
 
     fun show(force: Boolean = false, fromTyping: Boolean = false) {
+        if (context.resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE) {
+            return
+        }
         fadeAnimator?.cancel()
         if (!isViewAttached) {
             initWindow()
@@ -278,6 +281,7 @@ class FloatingBubbleOverlay(
         handler.removeCallbacks(singleTapRunnable)
         fadeAnimator?.cancel()
         widthAnimator?.cancel()
+        bubbleView?.cleanup()
         if (isViewAttached) {
             try {
                 bubbleView?.let { windowManager.removeView(it) }
@@ -441,7 +445,7 @@ class FloatingBubbleOverlay(
             MotionEvent.ACTION_MOVE -> {
                 val dy = event.rawY - initialTouchY
 
-                if (currentState == BubbleState.RECORDING) {
+                if (currentState == BubbleState.RECORDING || currentState == BubbleState.PROCESSING) {
                     // Se trascina verso il basso (> 48dp), attiva l'annullamento
                     if (dy > dpToPx(48f)) {
                         if (!isCancelCandidate) {
@@ -466,7 +470,7 @@ class FloatingBubbleOverlay(
                 if (isCancelCandidate) {
                     isCancelCandidate = false
                     view.setCancelCandidate(false)
-                    if (currentState == BubbleState.RECORDING) {
+                    if (currentState == BubbleState.RECORDING || currentState == BubbleState.PROCESSING) {
                         vibrate(60)
                         updateState(BubbleState.IDLE)
                         onCancelRecording()
@@ -500,6 +504,11 @@ class FloatingBubbleOverlay(
                     } else if (currentState == BubbleState.RECORDING) {
                         updateState(BubbleState.PROCESSING)
                         onStopRecording()
+                    } else if (currentState == BubbleState.PROCESSING) {
+                        // Tap per annullare immediatamente l'elaborazione in corso
+                        vibrate(35)
+                        updateState(BubbleState.IDLE)
+                        onCancelRecording()
                     }
                 }
                 return true
@@ -511,7 +520,7 @@ class FloatingBubbleOverlay(
                 if (isCancelCandidate) {
                     isCancelCandidate = false
                     view.setCancelCandidate(false)
-                    if (currentState == BubbleState.RECORDING) {
+                    if (currentState == BubbleState.RECORDING || currentState == BubbleState.PROCESSING) {
                         updateState(BubbleState.IDLE)
                         onCancelRecording()
                     }
@@ -555,6 +564,16 @@ class FloatingBubbleOverlay(
         private val clearPresetRunnable = Runnable {
             flashedPreset = null
             invalidate()
+        }
+
+        override fun onDetachedFromWindow() {
+            super.onDetachedFromWindow()
+            cleanup()
+        }
+
+        fun cleanup() {
+            spinnerAnimator.cancel()
+            handler.removeCallbacks(clearPresetRunnable)
         }
 
         fun setCancelCandidate(candidate: Boolean) {
@@ -707,7 +726,7 @@ class FloatingBubbleOverlay(
                 }
                 BubbleState.PROCESSING -> {
                     borderPaint.strokeWidth = dpToPx(1.6f).toFloat()
-                    borderPaint.color = Color.parseColor("#818CF8")
+                    borderPaint.color = if (isCancelCandidate) Color.parseColor("#EF4444") else Color.parseColor("#818CF8")
                 }
                 BubbleState.SUCCESS -> {
                     borderPaint.strokeWidth = dpToPx(1.6f).toFloat()
@@ -817,24 +836,37 @@ class FloatingBubbleOverlay(
                 }
 
                 BubbleState.PROCESSING -> {
-                    // Ala Sinistra: Spinner ciano neon rotante ad arco
-                    val spinnerR = dpToPx(7.5f).toFloat()
-                    val spinnerX = cx - dpToPx(44f)
-                    val sweepRect = RectF(spinnerX - spinnerR, cy - spinnerR, spinnerX + spinnerR, cy + spinnerR)
-                    canvas.save()
-                    canvas.rotate(spinnerAngle, spinnerX, cy)
-                    spinnerPaint.color = Color.parseColor("#38BDF8")
-                    spinnerPaint.strokeWidth = dpToPx(2.2f).toFloat()
-                    canvas.drawArc(sweepRect, 0f, 270f, false, spinnerPaint)
-                    canvas.restore()
+                    if (isCancelCandidate) {
+                        // Ala Sinistra: Icona annullamento
+                        iconPaint.color = Color.parseColor("#EF4444")
+                        iconPaint.textSize = dpToPx(13f).toFloat()
+                        canvas.drawText("✕", cx - dpToPx(44f), cy + dpToPx(4.5f), iconPaint)
 
-                    // Centro [cx - 18dp, cx + 18dp]: Safe Zone del Punch Hole fotocamera (completamente sgombra)
+                        // Ala Destra: Etichetta annulla
+                        statusTextPaint.textAlign = Paint.Align.LEFT
+                        statusTextPaint.color = Color.parseColor("#EF4444")
+                        statusTextPaint.textSize = dpToPx(12f).toFloat()
+                        canvas.drawText("Annulla", cx + dpToPx(24f), cy + dpToPx(4.2f), statusTextPaint)
+                    } else {
+                        // Ala Sinistra: Spinner ciano neon rotante ad arco
+                        val spinnerR = dpToPx(7.5f).toFloat()
+                        val spinnerX = cx - dpToPx(44f)
+                        val sweepRect = RectF(spinnerX - spinnerR, cy - spinnerR, spinnerX + spinnerR, cy + spinnerR)
+                        canvas.save()
+                        canvas.rotate(spinnerAngle, spinnerX, cy)
+                        spinnerPaint.color = Color.parseColor("#38BDF8")
+                        spinnerPaint.strokeWidth = dpToPx(2.2f).toFloat()
+                        canvas.drawArc(sweepRect, 0f, 270f, false, spinnerPaint)
+                        canvas.restore()
 
-                    // Ala Destra: Testo "Trascrizione..." allineato rigorosamente a sinistra da cx + 24dp
-                    statusTextPaint.textAlign = Paint.Align.LEFT
-                    statusTextPaint.textSize = dpToPx(12f).toFloat()
-                    statusTextPaint.color = Color.parseColor("#E4E4E7")
-                    canvas.drawText("Trascrizione...", cx + dpToPx(24f), cy + dpToPx(4.2f), statusTextPaint)
+                        // Centro [cx - 18dp, cx + 18dp]: Safe Zone del Punch Hole fotocamera (completamente sgombra)
+
+                        // Ala Destra: Testo "Trascrizione..." allineato rigorosamente a sinistra da cx + 24dp
+                        statusTextPaint.textAlign = Paint.Align.LEFT
+                        statusTextPaint.textSize = dpToPx(12f).toFloat()
+                        statusTextPaint.color = Color.parseColor("#E4E4E7")
+                        canvas.drawText("Trascrizione...", cx + dpToPx(24f), cy + dpToPx(4.2f), statusTextPaint)
+                    }
                 }
 
                 BubbleState.SUCCESS -> {
