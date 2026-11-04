@@ -3,6 +3,7 @@ package com.openflow.android.audio
 import android.content.Context
 import android.media.MediaRecorder
 import android.os.Build
+import android.os.PowerManager
 import android.util.Log
 import java.io.File
 import java.io.IOException
@@ -11,6 +12,7 @@ class AudioRecorderManager(private val context: Context) {
 
     private var mediaRecorder: MediaRecorder? = null
     private var currentOutputFile: File? = null
+    private var wakeLock: PowerManager.WakeLock? = null
     var isRecording: Boolean = false
         private set
 
@@ -18,6 +20,16 @@ class AudioRecorderManager(private val context: Context) {
         if (isRecording) {
             stopRecording()
         }
+
+        // Acquisisce un WakeLock parziale per garantire che la CPU non venga sospesa
+        // durante la cattura del flusso vocale (particolarmente critico su Samsung, OnePlus, Vivo).
+        try {
+            val powerManager = context.getSystemService(Context.POWER_SERVICE) as? PowerManager
+            wakeLock = powerManager?.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "OpenFlow:RecordingWakeLock")?.apply {
+                setReferenceCounted(false)
+                acquire(90_000L) // Timeout precauzionale di 90s
+            }
+        } catch (_: Exception) {}
 
         val cacheDir = context.cacheDir
         val audioFile = File(cacheDir, "openflow_voice_${System.currentTimeMillis()}.m4a")
@@ -74,6 +86,7 @@ class AudioRecorderManager(private val context: Context) {
             }
             mediaRecorder = null
             isRecording = false
+            releaseWakeLock()
             currentOutputFile
         } catch (e: Exception) {
             Log.e(TAG, "Errore durante stop registrazione: ${e.message}", e)
@@ -99,8 +112,18 @@ class AudioRecorderManager(private val context: Context) {
         } catch (_: Exception) {}
         mediaRecorder = null
         isRecording = false
+        releaseWakeLock()
         currentOutputFile?.delete()
         currentOutputFile = null
+    }
+
+    private fun releaseWakeLock() {
+        try {
+            if (wakeLock?.isHeld == true) {
+                wakeLock?.release()
+            }
+        } catch (_: Exception) {}
+        wakeLock = null
     }
 
     companion object {

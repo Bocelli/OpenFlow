@@ -31,6 +31,10 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -54,6 +58,7 @@ import com.openflow.android.data.ApiProvider
 import com.openflow.android.data.PreferencesManager
 import com.openflow.android.data.PromptPreset
 import com.openflow.android.service.FlowAccessibilityService
+import com.openflow.android.util.DeviceBrand
 import com.openflow.android.util.PowerOptimizationHelper
 
 // Swiss Minimalist & Modern Technical Dark Palette (Anti-Slop)
@@ -145,6 +150,8 @@ fun MainSettingsScreen(
     var isBatteryOptIgnored by remember {
         mutableStateOf(PowerOptimizationHelper.isIgnoringBatteryOptimizations(context))
     }
+    val currentBrand = remember { PowerOptimizationHelper.getDeviceBrand() }
+    var showBatteryGuideDialog by remember { mutableStateOf(false) }
 
     var activeProvider by remember { mutableStateOf(prefs.activeProvider) }
     var openAiKey by remember { mutableStateOf(prefs.openAiKey) }
@@ -512,7 +519,7 @@ fun MainSettingsScreen(
                     hasMic = hasMicPermission,
                     hasOverlay = hasOverlayPermission,
                     isBatteryOptIgnored = isBatteryOptIgnored,
-                    isXiaomiDevice = PowerOptimizationHelper.isXiaomiDevice(),
+                    brand = currentBrand,
                     onOpenAccessibility = {
                         context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
                     },
@@ -527,8 +534,8 @@ fun MainSettingsScreen(
                     onRequestBatteryOpt = {
                         PowerOptimizationHelper.requestIgnoreBatteryOptimizations(context)
                     },
-                    onOpenXiaomiAutostart = {
-                        PowerOptimizationHelper.openXiaomiAutostartSettings(context)
+                    onOpenBrandGuide = {
+                        showBatteryGuideDialog = true
                     }
                 )
             }
@@ -735,6 +742,13 @@ fun MainSettingsScreen(
 
         if (showHistoryVault) {
             HistoryVaultSheet(onDismiss = { showHistoryVault = false })
+        }
+
+        if (showBatteryGuideDialog) {
+            BatteryOptimizationGuideDialog(
+                initialBrand = currentBrand,
+                onDismiss = { showBatteryGuideDialog = false }
+            )
         }
     }
 }
@@ -972,12 +986,12 @@ fun SystemStatusCard(
     hasMic: Boolean,
     hasOverlay: Boolean,
     isBatteryOptIgnored: Boolean,
-    isXiaomiDevice: Boolean,
+    brand: DeviceBrand,
     onOpenAccessibility: () -> Unit,
     onRequestMic: () -> Unit,
     onRequestOverlay: () -> Unit,
     onRequestBatteryOpt: () -> Unit,
-    onOpenXiaomiAutostart: () -> Unit
+    onOpenBrandGuide: () -> Unit
 ) {
     Column(
         modifier = Modifier
@@ -1008,22 +1022,208 @@ fun SystemStatusCard(
         )
         HorizontalDivider(color = HairlineBorder.copy(alpha = 0.6f), thickness = 1.dp)
         StatusRow(
-            title = "Standby & Risparmio Batteria",
-            subtitle = "Consente l'esecuzione senza restrizioni per evitare freeze in standby",
+            title = "Esenzione Batteria Standard (Doze)",
+            subtitle = "Consente l'esecuzione senza restrizioni a livello Android",
             isGranted = isBatteryOptIgnored,
             onClick = onRequestBatteryOpt
         )
-        if (isXiaomiDevice) {
-            HorizontalDivider(color = HairlineBorder.copy(alpha = 0.6f), thickness = 1.dp)
-            StatusRow(
-                title = "⚡ Avvio Automatico Xiaomi / HyperOS",
-                subtitle = "Protegge OpenFlow dalla pulizia aggressiva MIUI",
-                isGranted = false,
-                actionText = "Configura",
-                onClick = onOpenXiaomiAutostart
-            )
-        }
+        HorizontalDivider(color = HairlineBorder.copy(alpha = 0.6f), thickness = 1.dp)
+        StatusRow(
+            title = "⚡ Ottimizzazione ${brand.title.substringBefore(" (")}",
+            subtitle = "Guida e configurazione anti-chiusura per il tuo dispositivo",
+            isGranted = false,
+            actionText = "Guida & Setup",
+            onClick = onOpenBrandGuide
+        )
     }
+}
+
+@Composable
+fun BatteryOptimizationGuideDialog(
+    initialBrand: DeviceBrand,
+    onDismiss: () -> Unit
+) {
+    val context = LocalContext.current
+    var selectedBrand by remember { mutableStateOf(initialBrand) }
+    val brands = DeviceBrand.values()
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = CardElevated,
+        titleContentColor = TextPrimary,
+        textContentColor = TextSecondary,
+        shape = RoundedCornerShape(18.dp),
+        modifier = Modifier.border(1.dp, HairlineBorderFocus, RoundedCornerShape(18.dp)),
+        title = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    modifier = Modifier
+                        .size(30.dp)
+                        .clip(CircleShape)
+                        .background(StatusEmerald.copy(alpha = 0.15f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Bolt,
+                        contentDescription = null,
+                        tint = StatusEmerald,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+                Spacer(modifier = Modifier.width(10.dp))
+                Text(
+                    text = "Guida Standby & Anti-Kill",
+                    fontSize = 17.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = TextPrimary
+                )
+            }
+        },
+        text = {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
+                Text(
+                    text = "Alcuni produttori chiudono aggressivamente le app in background anche con i permessi attivi. Ecco i passaggi consigliati per evitare freeze:",
+                    fontSize = 12.sp,
+                    color = TextSecondary,
+                    lineHeight = 16.5.sp
+                )
+
+                // Brand Selector Row
+                Text(
+                    text = "PRODUTTORE SELEZIONATO",
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = TextMuted,
+                    letterSpacing = 0.5.sp
+                )
+                LazyRow(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    items(brands) { b ->
+                        val isSelected = b == selectedBrand
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(if (isSelected) StatusEmerald.copy(alpha = 0.18f) else CardHighlight)
+                                .border(
+                                    1.dp,
+                                    if (isSelected) StatusEmerald else HairlineBorder,
+                                    RoundedCornerShape(8.dp)
+                                )
+                                .clickable { selectedBrand = b }
+                                .padding(horizontal = 9.dp, vertical = 5.dp)
+                        ) {
+                            Text(
+                                text = b.title.substringBefore(" (").substringBefore(" /"),
+                                fontSize = 11.sp,
+                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                color = if (isSelected) StatusEmerald else TextPrimary
+                            )
+                        }
+                    }
+                }
+
+                // Brand Summary Card
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(CardBg)
+                        .border(1.dp, HairlineBorder, RoundedCornerShape(12.dp))
+                        .padding(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(
+                        text = selectedBrand.title,
+                        fontSize = 13.5.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = TextPrimary
+                    )
+                    Text(
+                        text = selectedBrand.summary,
+                        fontSize = 11.5.sp,
+                        color = TextSecondary,
+                        lineHeight = 16.sp
+                    )
+                }
+
+                // Steps Checklist
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    selectedBrand.steps.forEach { step ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.Top
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .padding(top = 4.dp)
+                                    .size(5.dp)
+                                    .clip(CircleShape)
+                                    .background(StatusEmerald)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = step,
+                                fontSize = 11.5.sp,
+                                color = TextPrimary,
+                                lineHeight = 16.5.sp
+                            )
+                        }
+                    }
+                }
+
+                // Action Button: Open Manufacturer Settings
+                Button(
+                    onClick = {
+                        PowerOptimizationHelper.openManufacturerSettings(context, selectedBrand)
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(10.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = CardHighlight),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, HairlineBorderFocus)
+                ) {
+                    Text(
+                        text = "Apri Impostazioni di Sistema",
+                        fontSize = 12.5.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = TextPrimary
+                    )
+                }
+
+                // Link DontKillMyApp
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable {
+                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(selectedBrand.guideUrl)).apply {
+                                flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                            }
+                            context.startActivity(intent)
+                        },
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Consulta la guida DontKillMyApp.com ↗",
+                        fontSize = 11.sp,
+                        color = StatusEmerald,
+                        fontWeight = FontWeight.Medium
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Chiudi", color = TextPrimary, fontWeight = FontWeight.SemiBold)
+            }
+        }
+    )
 }
 
 @Composable

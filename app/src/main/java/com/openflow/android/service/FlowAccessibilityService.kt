@@ -138,7 +138,10 @@ class FlowAccessibilityService : AccessibilityService() {
                 prefs = prefs,
                 onStartRecording = { handleStartRecording() },
                 onStopRecording = { handleStopRecording() },
-                onCancelRecording = { audioRecorder.cancelRecording() },
+                onCancelRecording = {
+                    stopAudioRecordService()
+                    audioRecorder.cancelRecording()
+                },
                 getAmplitude = { audioRecorder.getMaxAmplitude() }
             )
         }
@@ -308,13 +311,19 @@ class FlowAccessibilityService : AccessibilityService() {
     }
 
     private fun handleStartRecording() {
+        try {
+            startService(Intent(this, AudioRecordService::class.java))
+        } catch (_: Exception) {}
+
         val result = audioRecorder.startRecording()
         if (result.isFailure) {
+            stopAudioRecordService()
             bubbleOverlay?.updateState(BubbleState.ERROR)
         }
     }
 
     private fun handleStopRecording() {
+        stopAudioRecordService()
         val recordedFile = audioRecorder.stopRecording()
         if (recordedFile == null || !recordedFile.exists()) {
             bubbleOverlay?.updateState(BubbleState.ERROR)
@@ -561,9 +570,16 @@ class FlowAccessibilityService : AccessibilityService() {
         } catch (_: Exception) {}
     }
 
+    private fun stopAudioRecordService() {
+        try {
+            stopService(Intent(this, AudioRecordService::class.java))
+        } catch (_: Exception) {}
+    }
+
     override fun onInterrupt() {
         bubbleOverlay?.hide()
         audioRecorder.cancelRecording()
+        stopAudioRecordService()
     }
 
     override fun onDestroy() {
@@ -571,6 +587,7 @@ class FlowAccessibilityService : AccessibilityService() {
         mainHandler.removeCallbacksAndMessages(null)
         bubbleOverlay?.destroy()
         audioRecorder.cancelRecording()
+        stopAudioRecordService()
         cancelOngoingNotification()
         try { activeTargetNode?.recycle() } catch (_: Exception) {}
         activeTargetNode = null
