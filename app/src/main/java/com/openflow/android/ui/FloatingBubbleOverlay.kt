@@ -33,6 +33,14 @@ enum class BubbleState {
     ERROR
 }
 
+/**
+ * Release C: Dynamic Island Notch-Docked Overlay (Universale).
+ *
+ * Invece di fluttuare ai lati dello schermo, la pillola è ancorata permanentemente attorno al punch-hole
+ * della fotocamera frontale (Display Cutout) tramite WindowManager.
+ * Si espande elasticamente verso destra e sinistra durante la dettatura e si ritrae a riposo.
+ * Funziona al 100% su qualsiasi Android (Xiaomi, Samsung, Pixel, OnePlus, ecc.) senza dipendere da ROM o Root.
+ */
 @SuppressLint("ClickableViewAccessibility")
 class FloatingBubbleOverlay(
     private val context: Context,
@@ -59,28 +67,22 @@ class FloatingBubbleOverlay(
     var currentState: BubbleState = BubbleState.IDLE
         private set
 
-    private var currentWidthPx = dpToPx(IDLE_SIZE_DP)
-    private var currentHeightPx = dpToPx(HEIGHT_DP)
-    private var isDockedOnRight = true
+    private var currentWidthPx = dpToPx(IDLE_WIDTH_DP)
+    private var currentHeightPx = dpToPx(IDLE_HEIGHT_DP)
 
-    // Coordinate & Drag
-    private var initialX = 0
-    private var initialY = 0
-    private var initialTouchX = 0f
+    // Touch & Gesture Tracking
     private var initialTouchY = 0f
     private var touchDownTime = 0L
     private var lastTapUpTime = 0L
-    private var isDragging = false
     private var isPushToTalkActive = false
     private var isCancelCandidate = false
 
     private var widthAnimator: ValueAnimator? = null
-    private var snapAnimator: ValueAnimator? = null
     private var fadeAnimator: ValueAnimator? = null
 
     private val stealthDimRunnable = Runnable {
         if (currentState == BubbleState.IDLE && prefs.stealthModeEnabled) {
-            bubbleView?.animate()?.alpha(0.28f)?.setDuration(280)?.start()
+            bubbleView?.animate()?.alpha(0.35f)?.setDuration(280)?.start()
         }
     }
 
@@ -92,7 +94,7 @@ class FloatingBubbleOverlay(
     }
 
     private val longPressRunnable = Runnable {
-        if (!isDragging && currentState == BubbleState.IDLE) {
+        if (currentState == BubbleState.IDLE) {
             isPushToTalkActive = true
             vibrate(40)
             updateState(BubbleState.RECORDING)
@@ -105,7 +107,7 @@ class FloatingBubbleOverlay(
             if (currentState == BubbleState.RECORDING) {
                 val amp = getAmplitude()
                 bubbleView?.setAmplitude(amp)
-                handler.postDelayed(this, 50)
+                handler.postDelayed(this, 40)
             }
         }
     }
@@ -129,9 +131,10 @@ class FloatingBubbleOverlay(
         view.scaleX = 1f
         view.scaleY = 1f
 
-        // Rende la finestra toccabile sui suoi confini effettivi
         params.flags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
-                WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
+                WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
+                WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
+                WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS
         try {
             windowManager.updateViewLayout(view, params)
         } catch (_: Exception) {}
@@ -146,7 +149,6 @@ class FloatingBubbleOverlay(
 
     fun hide() {
         if (!isViewAttached || !isVisible) return
-        // NON nascondere mai se c'è una registrazione vocale o elaborazione in corso
         if (currentState == BubbleState.RECORDING || currentState == BubbleState.PROCESSING) {
             return
         }
@@ -173,11 +175,11 @@ class FloatingBubbleOverlay(
                 override fun onAnimationEnd(animation: Animator) {
                     if (!isVisible) {
                         view.visibility = View.GONE
-                        // Quando nascosta, imposta FLAG_NOT_TOUCHABLE per garantire che il 100% degli input
-                        // dell'utente passi indisturbato alle app sottostanti senza bloccare il touch.
                         params.flags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
                                 WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
-                                WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
+                                WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or
+                                WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
+                                WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS
                         try {
                             windowManager.updateViewLayout(view, params)
                         } catch (_: Exception) {}
@@ -191,13 +193,6 @@ class FloatingBubbleOverlay(
     private fun initWindow() {
         if (isViewAttached) return
 
-        val displayMetrics = context.resources.displayMetrics
-        val screenWidth = displayMetrics.widthPixels
-        val screenHeight = displayMetrics.heightPixels
-
-        currentWidthPx = dpToPx(IDLE_SIZE_DP)
-        currentHeightPx = dpToPx(HEIGHT_DP)
-
         val windowType = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY
         } else {
@@ -205,23 +200,22 @@ class FloatingBubbleOverlay(
             WindowManager.LayoutParams.TYPE_PHONE
         }
 
-        // Posiziona comodamente la bolla sul bordo destro con margine
-        isDockedOnRight = true
-        val margin = dpToPx(MARGIN_DP)
-        val initialXPos = screenWidth - currentWidthPx - margin
-        val initialYPos = (screenHeight * 0.52f).toInt()
-
         val params = WindowManager.LayoutParams(
             currentWidthPx,
             currentHeightPx,
             windowType,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
-                    WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
+                    WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
+                    WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
+                    WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
             PixelFormat.TRANSLUCENT
         ).apply {
-            gravity = Gravity.TOP or Gravity.START
-            x = initialXPos
-            y = initialYPos
+            gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL
+            x = 0
+            y = dpToPx(TOP_OFFSET_DP)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS
+            }
         }
 
         layoutParams = params
@@ -235,9 +229,9 @@ class FloatingBubbleOverlay(
             isViewAttached = true
             isVisible = true
             updateState(BubbleState.IDLE)
-            Log.d(TAG, "FloatingBubbleOverlay initWindow creata con successo")
+            Log.d(TAG, "Notch Island overlay inizializzato con successo")
         } catch (e: Exception) {
-            Log.e(TAG, "Errore addView overlay: ${e.message}", e)
+            Log.e(TAG, "Errore addView overlay notch: ${e.message}", e)
             try {
                 params.type = WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
                 windowManager.addView(view, params)
@@ -256,7 +250,6 @@ class FloatingBubbleOverlay(
         handler.removeCallbacks(singleTapRunnable)
         fadeAnimator?.cancel()
         widthAnimator?.cancel()
-        snapAnimator?.cancel()
         if (isViewAttached) {
             try {
                 bubbleView?.let { windowManager.removeView(it) }
@@ -266,10 +259,6 @@ class FloatingBubbleOverlay(
         }
     }
 
-    /**
-     * Risveglia istantaneamente la bolla dall'opacità ridotta (Stealth Mode 28%)
-     * e la porta al 100% di luminosità. Chiamato quando l'utente apre la tastiera o seleziona un campo di testo.
-     */
     fun wakeUpFromStealth() {
         handler.removeCallbacks(stealthDimRunnable)
         if (!isVisible || !isViewAttached) {
@@ -282,16 +271,10 @@ class FloatingBubbleOverlay(
         }
     }
 
-    /**
-     * Blocca il timer di attenuazione stealth: la bolla rimane al 100% visibile mentre l'utente scrive.
-     */
     fun cancelStealth() {
         handler.removeCallbacks(stealthDimRunnable)
     }
 
-    /**
-     * Pianifica il ritorno in modalità Stealth (28% di opacità) dopo inattività (3.5 secondi).
-     */
     fun scheduleStealth(delayMs: Long = 3500) {
         handler.removeCallbacks(stealthDimRunnable)
         if (prefs.stealthModeEnabled && currentState == BubbleState.IDLE) {
@@ -318,73 +301,75 @@ class FloatingBubbleOverlay(
                 handler.removeCallbacks(stealthDimRunnable)
                 bubbleView?.alpha = 1f
                 vibrate(35)
-                animateToWidth(RECORDING_WIDTH_DP)
+                animateToSize(RECORDING_WIDTH_DP, RECORDING_HEIGHT_DP)
                 handler.post(amplitudePollingRunnable)
             }
             BubbleState.PROCESSING -> {
                 handler.removeCallbacks(stealthDimRunnable)
                 bubbleView?.alpha = 1f
                 handler.removeCallbacks(amplitudePollingRunnable)
-                animateToWidth(PROCESSING_WIDTH_DP)
+                animateToSize(PROCESSING_WIDTH_DP, RECORDING_HEIGHT_DP)
             }
             BubbleState.SUCCESS -> {
                 handler.removeCallbacks(stealthDimRunnable)
                 bubbleView?.alpha = 1f
                 vibrate(50)
                 handler.removeCallbacks(amplitudePollingRunnable)
-                animateToWidth(IDLE_SIZE_DP)
+                animateToSize(SUCCESS_WIDTH_DP, RECORDING_HEIGHT_DP)
                 handler.postDelayed({
                     updateState(BubbleState.IDLE)
                     if (prefs.showOnlyWhenFocused) {
                         hide()
                     }
-                }, 1200)
+                }, 1300)
             }
             BubbleState.ERROR -> {
                 handler.removeCallbacks(stealthDimRunnable)
                 bubbleView?.alpha = 1f
                 vibrate(90)
                 handler.removeCallbacks(amplitudePollingRunnable)
-                animateToWidth(IDLE_SIZE_DP)
+                animateToSize(SUCCESS_WIDTH_DP, RECORDING_HEIGHT_DP)
                 handler.postDelayed({
                     updateState(BubbleState.IDLE)
-                }, 1500)
+                    if (prefs.showOnlyWhenFocused) {
+                        hide()
+                    }
+                }, 1600)
             }
             BubbleState.IDLE -> {
                 handler.removeCallbacks(amplitudePollingRunnable)
-                animateToWidth(IDLE_SIZE_DP)
+                animateToSize(IDLE_WIDTH_DP, IDLE_HEIGHT_DP)
                 scheduleStealth()
             }
         }
     }
 
     /**
-     * Espansione e contrazione fluida della bolla in pillola vocale.
-     * Se ancorata a destra, si espande elegantemente verso sinistra senza uscire dallo schermo.
+     * Espansione e contrazione fluida della pillola attorno al foro della fotocamera.
      */
-    private fun animateToWidth(targetWidthDp: Float) {
+    private fun animateToSize(targetWidthDp: Float, targetHeightDp: Float) {
         val params = layoutParams ?: return
         val view = bubbleView ?: return
         val startW = currentWidthPx
         val targetW = dpToPx(targetWidthDp)
-        if (startW == targetW) return
-
-        val screenWidth = context.resources.displayMetrics.widthPixels
-        val margin = dpToPx(MARGIN_DP)
+        val startH = currentHeightPx
+        val targetH = dpToPx(targetHeightDp)
+        if (startW == targetW && startH == targetH) return
 
         widthAnimator?.cancel()
-        widthAnimator = ValueAnimator.ofInt(startW, targetW).apply {
-            duration = 230
+        widthAnimator = ValueAnimator.ofFloat(0f, 1f).apply {
+            duration = 240
             interpolator = DecelerateInterpolator(1.4f)
             addUpdateListener { anim ->
-                val w = anim.animatedValue as Int
+                val fraction = anim.animatedValue as Float
+                val w = (startW + (targetW - startW) * fraction).toInt()
+                val h = (startH + (targetH - startH) * fraction).toInt()
                 currentWidthPx = w
+                currentHeightPx = h
                 params.width = w
-                if (isDockedOnRight) {
-                    params.x = screenWidth - w - margin
-                } else {
-                    params.x = margin
-                }
+                params.height = h
+                params.x = 0
+                params.y = dpToPx(TOP_OFFSET_DP)
                 try {
                     windowManager.updateViewLayout(view, params)
                 } catch (_: Exception) {}
@@ -395,22 +380,14 @@ class FloatingBubbleOverlay(
     }
 
     private fun handleTouchEvent(event: MotionEvent): Boolean {
-        val params = layoutParams ?: return false
         val view = bubbleView ?: return false
-        val screenWidth = context.resources.displayMetrics.widthPixels
-        val screenHeight = context.resources.displayMetrics.heightPixels
-        val margin = dpToPx(MARGIN_DP)
 
         when (event.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
                 handler.removeCallbacks(stealthDimRunnable)
                 view.alpha = 1f
-                initialX = params.x
-                initialY = params.y
-                initialTouchX = event.rawX
                 initialTouchY = event.rawY
                 touchDownTime = SystemClock.uptimeMillis()
-                isDragging = false
                 isPushToTalkActive = false
                 isCancelCandidate = false
                 view.setCancelCandidate(false)
@@ -423,17 +400,17 @@ class FloatingBubbleOverlay(
             }
 
             MotionEvent.ACTION_MOVE -> {
-                val dx = event.rawX - initialTouchX
                 val dy = event.rawY - initialTouchY
 
                 if (currentState == BubbleState.RECORDING) {
-                    if (dy > dpToPx(65f)) {
+                    // Se trascina verso il basso (> 48dp), attiva l'annullamento
+                    if (dy > dpToPx(48f)) {
                         if (!isCancelCandidate) {
                             isCancelCandidate = true
                             view.setCancelCandidate(true)
                             vibrate(25)
                         }
-                    } else if (dy < dpToPx(40f)) {
+                    } else if (dy < dpToPx(28f)) {
                         if (isCancelCandidate) {
                             isCancelCandidate = false
                             view.setCancelCandidate(false)
@@ -441,78 +418,39 @@ class FloatingBubbleOverlay(
                     }
                     return true
                 }
-
-                if (!isDragging && (abs(dx) > dpToPx(6f) || abs(dy) > dpToPx(6f))) {
-                    if (!isPushToTalkActive) {
-                        isDragging = true
-                        handler.removeCallbacks(longPressRunnable)
-                    }
-                }
-
-                if (isDragging) {
-                    params.x = (initialX + dx).toInt().coerceIn(0, screenWidth - currentWidthPx)
-                    params.y = (initialY + dy).toInt().coerceIn(dpToPx(24f), screenHeight - currentHeightPx - dpToPx(24f))
-                    try {
-                        windowManager.updateViewLayout(view, params)
-                    } catch (_: Exception) {}
-                }
-                return true
             }
 
             MotionEvent.ACTION_UP -> {
                 view.animateScale(1.0f)
                 handler.removeCallbacks(longPressRunnable)
 
-                if (currentState == BubbleState.RECORDING && isCancelCandidate) {
+                if (isCancelCandidate) {
                     isCancelCandidate = false
                     view.setCancelCandidate(false)
-                    isPushToTalkActive = false
-                    vibrate(40)
-                    updateState(BubbleState.IDLE)
-                    onCancelRecording()
-                    return true
-                }
-
-                if (isPushToTalkActive) {
-                    isPushToTalkActive = false
-                    updateState(BubbleState.PROCESSING)
-                    onStopRecording()
-                    return true
-                }
-
-                if (isDragging) {
-                    // Calcola il bordo più vicino per un magnetismo naturale
-                    val bubbleCenterX = params.x + currentWidthPx / 2
-                    isDockedOnRight = bubbleCenterX >= screenWidth / 2
-                    val targetX = if (isDockedOnRight) {
-                        screenWidth - currentWidthPx - margin
-                    } else {
-                        margin
-                    }
-
-                    snapAnimator?.cancel()
-                    snapAnimator = ValueAnimator.ofInt(params.x, targetX).apply {
-                        duration = 200
-                        interpolator = DecelerateInterpolator()
-                        addUpdateListener { anim ->
-                            params.x = anim.animatedValue as Int
-                            try {
-                                windowManager.updateViewLayout(view, params)
-                            } catch (_: Exception) {}
-                        }
-                        start()
+                    if (currentState == BubbleState.RECORDING) {
+                        vibrate(60)
+                        updateState(BubbleState.IDLE)
+                        onCancelRecording()
                     }
                     scheduleStealth()
                     return true
                 }
 
-                // Tocco rapido (Tap)
+                if (isPushToTalkActive) {
+                    isPushToTalkActive = false
+                    if (currentState == BubbleState.RECORDING) {
+                        updateState(BubbleState.PROCESSING)
+                        onStopRecording()
+                    }
+                    scheduleStealth()
+                    return true
+                }
+
                 val duration = SystemClock.uptimeMillis() - touchDownTime
                 if (duration < 350) {
                     if (currentState == BubbleState.IDLE) {
                         val now = SystemClock.uptimeMillis()
                         if (now - lastTapUpTime < 280) {
-                            // Doppio Tocco: Ciclo Stile Prompt
                             handler.removeCallbacks(singleTapRunnable)
                             lastTapUpTime = 0L
                             cyclePreset()
@@ -559,14 +497,12 @@ class FloatingBubbleOverlay(
     }
 
     /**
-     * Vista d'autore Wispr Flow / Swiss Minimalist:
-     * - In IDLE: badge acustico compatto (56x56) con glifo a 3 pilastri armonici.
-     * - In RECORDING: pillola vocale estesa (142x56) in stile messaggio vocale:
-     *   • Alone pulsante di ascolto (aura traslucida smeraldo)
-     *   • Indicatore di registrazione rosso/smeraldo a respiro + Timer numerico in tempo reale (00:03)
-     *   • Equalizzatore reattivo a 5 barre dinamiche danzanti sul microfono reale
-     * - In PROCESSING: micro spinner essenziale in titanio
-     * - In SUCCESS/ERROR: checkmark o alert discreto
+     * Vista Dynamic Island d'autore:
+     * - Ancorata attorno al foro della fotocamera (punch-hole)
+     * - IDLE: micro-capsula nera opaca attorno al sensore
+     * - RECORDING: espansione alare a sinistra (equalizzatore vocale 5 barre) e a destra (timer + dot)
+     * - PROCESSING: barra di progresso ritmica / breathing pulse
+     * - SUCCESS: badge verde smeraldo di conferma
      */
     private inner class BubbleCustomView(context: Context) : View(context) {
 
@@ -597,18 +533,18 @@ class FloatingBubbleOverlay(
         }
 
         private val bgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = Color.parseColor("#0C0D10")
+            color = Color.BLACK
             style = Paint.Style.FILL
         }
 
         private val borderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             style = Paint.Style.STROKE
-            strokeWidth = dpToPx(1.6f).toFloat()
+            strokeWidth = dpToPx(1.4f).toFloat()
         }
 
         private val haloPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             style = Paint.Style.STROKE
-            strokeWidth = dpToPx(3f).toFloat()
+            strokeWidth = dpToPx(2.5f).toFloat()
         }
 
         private val wavePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -628,15 +564,15 @@ class FloatingBubbleOverlay(
         }
 
         private val statusTextPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            textSize = dpToPx(20f).toFloat()
+            textSize = dpToPx(12f).toFloat()
             typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
             textAlign = Paint.Align.CENTER
         }
 
         private val spinnerPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = Color.parseColor("#D4D4D8")
+            color = Color.parseColor("#38BDF8")
             style = Paint.Style.STROKE
-            strokeWidth = dpToPx(2.2f).toFloat()
+            strokeWidth = dpToPx(2f).toFloat()
             strokeCap = Paint.Cap.ROUND
         }
 
@@ -684,8 +620,8 @@ class FloatingBubbleOverlay(
             val h = height.toFloat()
             if (w <= 0f || h <= 0f) return
 
-            val strokeW = dpToPx(1.6f).toFloat()
-            val inset = strokeW / 2f + dpToPx(3f).toFloat()
+            val strokeW = dpToPx(1.4f).toFloat()
+            val inset = strokeW / 2f + dpToPx(2f).toFloat()
             val rect = RectF(inset, inset, w - inset, h - inset)
             val radius = rect.height() / 2f
             val cx = w / 2f
@@ -694,34 +630,34 @@ class FloatingBubbleOverlay(
             val now = SystemClock.uptimeMillis()
             val pulse = (sin((now % 1200) / 1200.0 * 2.0 * Math.PI) * 0.5 + 0.5).toFloat()
 
-            // 1. Alone pulsante (halo breath) durante la registrazione
+            // 1. Alone luminoso attorno al notch durante la registrazione
             if (state == BubbleState.RECORDING) {
-                val haloInset = inset - dpToPx(1.2f + 2.2f * pulse)
+                val haloInset = inset - dpToPx(1.5f + 2f * pulse)
                 val haloRect = RectF(haloInset, haloInset, w - haloInset, h - haloInset)
                 val haloRadius = haloRect.height() / 2f
                 if (isCancelCandidate) {
                     haloPaint.color = Color.argb((50 + 60 * pulse).toInt(), 239, 68, 68)
                 } else {
-                    haloPaint.color = Color.argb((35 + 40 * pulse).toInt(), 16, 185, 129) // Emerald traslucido
+                    haloPaint.color = Color.argb((35 + 40 * pulse).toInt(), 56, 189, 248) // Sky blue
                 }
                 canvas.drawRoundRect(haloRect, haloRadius, haloRadius, haloPaint)
             }
 
-            // 2. Sfondo Pillola Obsidian
-            bgPaint.color = Color.parseColor("#0C0D10")
+            // 2. Sfondo Pillola Nero Assoluto OLED
+            bgPaint.color = Color.BLACK
             canvas.drawRoundRect(rect, radius, radius, bgPaint)
 
-            // 3. Bordo Hairline minimale
+            // 3. Bordo rifinito
             when (state) {
-                BubbleState.RECORDING -> borderPaint.color = if (isCancelCandidate) Color.parseColor("#EF4444") else Color.parseColor("#10B981")
-                BubbleState.PROCESSING -> borderPaint.color = Color.parseColor("#3F3F46")
+                BubbleState.RECORDING -> borderPaint.color = if (isCancelCandidate) Color.parseColor("#EF4444") else Color.parseColor("#38BDF8")
+                BubbleState.PROCESSING -> borderPaint.color = Color.parseColor("#818CF8")
                 BubbleState.SUCCESS -> borderPaint.color = Color.parseColor("#10B981")
                 BubbleState.ERROR -> borderPaint.color = Color.parseColor("#EF4444")
                 BubbleState.IDLE -> borderPaint.color = Color.parseColor("#27272A")
             }
             canvas.drawRoundRect(rect, radius, radius, borderPaint)
 
-            // 4. Contenuto per stato
+            // 4. Contenuti dinamici
             when (state) {
                 BubbleState.IDLE -> {
                     val p = flashedPreset
@@ -739,42 +675,37 @@ class FloatingBubbleOverlay(
                             PromptPreset.BULLETS -> Color.parseColor("#F59E0B")
                         }
                         statusTextPaint.color = accentColor
-                        statusTextPaint.textSize = dpToPx(11f).toFloat()
-                        canvas.drawText(label, cx, cy + dpToPx(4f), statusTextPaint)
+                        statusTextPaint.textSize = dpToPx(10f).toFloat()
+                        canvas.drawText(label, cx, cy + dpToPx(3.5f), statusTextPaint)
                     } else {
-                        drawFlowGlyph(canvas, cx, cy)
+                        // Micro-punto rifinito che indica lo stile attivo
+                        val dotPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                            style = Paint.Style.FILL
+                            color = when (prefs.activePreset) {
+                                PromptPreset.NATURAL -> Color.parseColor("#10B981")
+                                PromptPreset.AI_PROMPT -> Color.parseColor("#818CF8")
+                                PromptPreset.PROFESSIONAL -> Color.parseColor("#E4E4E7")
+                                PromptPreset.BULLETS -> Color.parseColor("#F59E0B")
+                            }
+                        }
+                        canvas.drawCircle(cx, cy + dpToPx(9f), dpToPx(1.6f).toFloat(), dotPaint)
                     }
                 }
 
                 BubbleState.RECORDING -> {
                     if (isCancelCandidate) {
-                        // Feedback visivo immediato di cancellazione trascinando verso il basso
                         statusTextPaint.color = Color.parseColor("#EF4444")
-                        statusTextPaint.textSize = dpToPx(11.5f).toFloat()
-                        canvas.drawText("✕ RILASCIA PER ANNULLARE", cx, cy + dpToPx(4f), statusTextPaint)
+                        statusTextPaint.textSize = dpToPx(11f).toFloat()
+                        canvas.drawText("✕ ANNULLA", cx, cy + dpToPx(4f), statusTextPaint)
                     } else {
-                        // Sinistra: Indicatore REC a respiro + Timer numerico (00:03)
-                        val recDotX = dpToPx(15f).toFloat()
-                        val recDotR = dpToPx(3.6f).toFloat()
-                        recDotPaint.color = Color.argb((150 + 105 * pulse).toInt(), 239, 68, 68) // Rosso vivido pulsante
-                        canvas.drawCircle(recDotX, cy, recDotR, recDotPaint)
-
-                        val elapsedSec = ((now - recordingStartTime) / 1000L).coerceAtLeast(0L)
-                        val mm = elapsedSec / 60
-                        val ss = elapsedSec % 60
-                        val timeStr = String.format(Locale.US, "%02d:%02d", mm, ss)
-                        val textY = cy + dpToPx(4.2f)
-                        canvas.drawText(timeStr, recDotX + dpToPx(6.5f), textY, timerTextPaint)
-
-                        // Destra: Equalizzatore reattivo a 5 barre dinamiche
-                        val waveStartX = dpToPx(66f).toFloat()
-                        val waveEndX = w - dpToPx(14f)
+                        // A sinistra della fotocamera (cx - 24dp indietro): Equalizzatore a 5 barre
+                        val waveStartX = dpToPx(14f).toFloat()
+                        val waveEndX = cx - dpToPx(20f)
                         val availableW = waveEndX - waveStartX
                         val numBars = 5
-                        val barWidth = dpToPx(3.2f).toFloat()
-                        val step = (availableW - barWidth) / (numBars - 1).coerceAtLeast(1)
-
-                        val maxBarHeight = h * 0.50f
+                        val barWidth = dpToPx(2.8f).toFloat()
+                        val step = (availableW - barWidth) / (numBars - 1).coerceAtLeast(1).toFloat()
+                        val maxBarHeight = h * 0.46f
 
                         for (i in 0 until numBars) {
                             val bx = waveStartX + i * step + barWidth / 2f
@@ -788,81 +719,64 @@ class FloatingBubbleOverlay(
                                 bx + barWidth / 2f,
                                 cy + barH / 2f
                             )
-                            wavePaint.color = if (i == 2) Color.parseColor("#34D399") else Color.parseColor("#E4E4E7")
-                            canvas.drawRoundRect(barRect, 4f, 4f, wavePaint)
+                            wavePaint.color = if (i == 2) Color.parseColor("#38BDF8") else Color.parseColor("#E4E4E7")
+                            canvas.drawRoundRect(barRect, 3f, 3f, wavePaint)
                         }
+
+                        // Al centro: il foro della fotocamera (lasciato pulito e nero)
+
+                        // A destra della fotocamera (cx + 20dp in avanti): Dot REC + Timer digitale
+                        val recDotX = cx + dpToPx(24f)
+                        val recDotR = dpToPx(3.2f).toFloat()
+                        recDotPaint.color = Color.argb((150 + 105 * pulse).toInt(), 239, 68, 68)
+                        canvas.drawCircle(recDotX, cy, recDotR, recDotPaint)
+
+                        val elapsedSec = ((now - recordingStartTime) / 1000L).coerceAtLeast(0L)
+                        val mm = elapsedSec / 60
+                        val ss = elapsedSec % 60
+                        val timeStr = String.format(Locale.US, "%02d:%02d", mm, ss)
+                        canvas.drawText(timeStr, recDotX + dpToPx(6f), cy + dpToPx(4.2f), timerTextPaint)
                     }
                 }
 
                 BubbleState.PROCESSING -> {
+                    // Spinner rotante + etichetta
+                    val spinnerR = dpToPx(7f).toFloat()
+                    val spinnerX = cx - dpToPx(40f)
+                    val sweepRect = RectF(spinnerX - spinnerR, cy - spinnerR, spinnerX + spinnerR, cy + spinnerR)
                     canvas.save()
-                    canvas.rotate(spinnerAngle, cx, cy)
-                    val r = dpToPx(10f).toFloat()
-                    val sweepRect = RectF(cx - r, cy - r, cx + r, cy + r)
+                    canvas.rotate(spinnerAngle, spinnerX, cy)
                     canvas.drawArc(sweepRect, 0f, 260f, false, spinnerPaint)
                     canvas.restore()
+
+                    statusTextPaint.textSize = dpToPx(11f).toFloat()
+                    statusTextPaint.color = Color.parseColor("#E4E4E7")
+                    canvas.drawText("Trascrizione...", cx + dpToPx(10f), cy + dpToPx(3.8f), statusTextPaint)
                 }
 
                 BubbleState.SUCCESS -> {
-                    statusTextPaint.textSize = dpToPx(20f).toFloat()
+                    statusTextPaint.textSize = dpToPx(11.5f).toFloat()
                     statusTextPaint.color = Color.parseColor("#10B981")
-                    canvas.drawText("✓", cx, cy + dpToPx(7f), statusTextPaint)
+                    canvas.drawText("Testo inserito ✓", cx, cy + dpToPx(4f), statusTextPaint)
                 }
 
                 BubbleState.ERROR -> {
-                    statusTextPaint.textSize = dpToPx(20f).toFloat()
+                    statusTextPaint.textSize = dpToPx(11.5f).toFloat()
                     statusTextPaint.color = Color.parseColor("#EF4444")
-                    canvas.drawText("!", cx, cy + dpToPx(7f), statusTextPaint)
+                    canvas.drawText("Errore ✕", cx, cy + dpToPx(4f), statusTextPaint)
                 }
             }
-        }
-
-        private fun drawFlowGlyph(canvas: Canvas, cx: Float, cy: Float) {
-            val glyphPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                style = Paint.Style.FILL
-            }
-            val barW = dpToPx(3.4f).toFloat()
-            val spacing = dpToPx(7.2f).toFloat()
-            val radius = barW / 2f
-
-            val bars = listOf(
-                Triple(-1f, dpToPx(11f).toFloat(), "#71717A"),
-                Triple(0f, dpToPx(19f).toFloat(), "#F4F4F5"),
-                Triple(1f, dpToPx(13f).toFloat(), "#71717A")
-            )
-
-            for ((pos, h, colorHex) in bars) {
-                glyphPaint.color = Color.parseColor(colorHex)
-                val x = cx + (pos * spacing)
-                val rect = RectF(
-                    x - barW / 2f,
-                    cy - h / 2f,
-                    x + barW / 2f,
-                    cy + h / 2f
-                )
-                canvas.drawRoundRect(rect, radius, radius, glyphPaint)
-            }
-
-            // Micro punto indicatore colore preset attivo (Swiss design detail)
-            val dotPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                style = Paint.Style.FILL
-                color = when (prefs.activePreset) {
-                    PromptPreset.NATURAL -> Color.parseColor("#10B981")
-                    PromptPreset.AI_PROMPT -> Color.parseColor("#818CF8")
-                    PromptPreset.PROFESSIONAL -> Color.parseColor("#E4E4E7")
-                    PromptPreset.BULLETS -> Color.parseColor("#F59E0B")
-                }
-            }
-            canvas.drawCircle(cx, cy + dpToPx(13.5f), dpToPx(1.6f).toFloat(), dotPaint)
         }
     }
 
     companion object {
-        private const val TAG = "FloatingBubbleOverlay"
-        private const val IDLE_SIZE_DP = 56f
-        private const val RECORDING_WIDTH_DP = 142f
-        private const val PROCESSING_WIDTH_DP = 94f
-        private const val HEIGHT_DP = 56f
-        private const val MARGIN_DP = 12f
+        private const val TAG = "NotchIslandOverlay"
+        private const val IDLE_WIDTH_DP = 46f
+        private const val IDLE_HEIGHT_DP = 36f
+        private const val RECORDING_WIDTH_DP = 216f
+        private const val RECORDING_HEIGHT_DP = 38f
+        private const val PROCESSING_WIDTH_DP = 152f
+        private const val SUCCESS_WIDTH_DP = 142f
+        private const val TOP_OFFSET_DP = 4f
     }
 }
