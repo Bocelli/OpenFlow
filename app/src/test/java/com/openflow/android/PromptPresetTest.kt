@@ -75,6 +75,30 @@ class PromptPresetTest {
     }
 
     @Test
+    fun testSanitizerKeepsRepeatedWordsAcrossSentencesAndParagraphs() {
+        // "Anna. Anna" sono due frasi, non un balbettio
+        assertEquals(
+            "Ho visto Anna. Anna ha detto di sì.",
+            AiPipelineClient.sanitizeAndFormatText("ho visto Anna. Anna ha detto di sì.")
+        )
+        assertEquals(
+            "Fine.\n\nFine di nuovo",
+            AiPipelineClient.sanitizeAndFormatText("fine.\n\nfine di nuovo")
+        )
+    }
+
+    @Test
+    fun testSanitizerDoesNotCapitalizeDomainsOrEmails() {
+        val input = "scrivimi a mario@gmail.com oppure su www.openflow.it."
+        assertEquals(input.replaceFirstChar { it.uppercase() }, AiPipelineClient.sanitizeAndFormatText(input))
+    }
+
+    @Test
+    fun testSanitizerKeepsWordsStartingWithBroadcast() {
+        assertEquals("Broadcasting è partito", AiPipelineClient.sanitizeAndFormatText("Broadcasting è partito"))
+    }
+
+    @Test
     fun testSanitizerFixesBrandsAndRemovesOralStarters() {
         val input = "Praticamente sto provando con grok e open ai e flash light con antigravity."
         val output = AiPipelineClient.sanitizeAndFormatText(input)

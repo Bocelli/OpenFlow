@@ -6,7 +6,6 @@ import android.os.Build
 import android.os.PowerManager
 import android.util.Log
 import java.io.File
-import java.io.IOException
 
 class AudioRecorderManager(private val context: Context) {
 
@@ -62,8 +61,10 @@ class AudioRecorderManager(private val context: Context) {
             mediaRecorder = recorder
             isRecording = true
             Result.success(audioFile)
-        } catch (e: IOException) {
+        } catch (e: Exception) {
+            // Non solo IOException: start() lancia IllegalStateException se il microfono è occupato (es. chiamata)
             Log.e(TAG, "Errore durante avvio registrazione: ${e.message}", e)
+            try { recorder.release() } catch (_: Exception) {} // mediaRecorder non è ancora assegnato: cleanup() non lo vede
             cleanup()
             Result.failure(e)
         }

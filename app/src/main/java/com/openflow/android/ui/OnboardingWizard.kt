@@ -790,10 +790,3 @@ private fun GestureGuideCard(title: String, description: String) {
         }
     }
 }
-
-private fun isAccessibilityServiceEnabled(context: Context): Boolean {
-    if (com.openflow.android.service.FlowAccessibilityService.instance != null) return true
-    val am = context.getSystemService(Context.ACCESSIBILITY_SERVICE) as? android.view.accessibility.AccessibilityManager ?: return false
-    val enabledServices = am.getEnabledAccessibilityServiceList(android.accessibilityservice.AccessibilityServiceInfo.FEEDBACK_ALL_MASK)
-    return enabledServices.any { it.resolveInfo.serviceInfo.packageName == context.packageName }
-}

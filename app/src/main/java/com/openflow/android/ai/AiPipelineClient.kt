@@ -31,10 +31,7 @@ class AiPipelineClient(private val prefs: PreferencesManager) {
         .writeTimeout(30, TimeUnit.SECONDS)
         .build()
 
-    suspend fun processSpeechToPolishedText(
-        audioFile: File,
-        surroundingContext: String? = null
-    ): Result<PipelineOutput> = withContext(Dispatchers.IO) {
+    suspend fun processSpeechToPolishedText(audioFile: File): Result<PipelineOutput> = withContext(Dispatchers.IO) {
         val apiKey = prefs.currentApiKey
         if (apiKey.isBlank()) {
             return@withContext Result.failure(IllegalStateException("Chiave API mancante. Configurala nell'app OpenFlow."))
@@ -48,7 +45,7 @@ class AiPipelineClient(private val prefs: PreferencesManager) {
             val geminiResult = processGeminiMultimodalAudio(audioFile, apiKey)
             return@withContext if (geminiResult.isSuccess) {
                 val polished = geminiResult.getOrThrow()
-                Log.d(TAG, "GEMINI SUCCESS: '$polished'")
+                Log.d(TAG, "GEMINI SUCCESS: ${polished.length} caratteri")
                 Result.success(PipelineOutput(text = sanitizeAndFormatText(polished), isFallback = false))
             } else {
                 val err = geminiResult.exceptionOrNull()?.message ?: "Errore sconosciuto Gemini"
@@ -70,14 +67,14 @@ class AiPipelineClient(private val prefs: PreferencesManager) {
             return@withContext Result.success(PipelineOutput(text = ""))
         }
 
-        Log.d(TAG, "RAW WHISPER: '$rawTranscription'")
+        Log.d(TAG, "RAW WHISPER: ${rawTranscription.length} caratteri")
 
         // 2. STADIO 2: Polishing e formattazione con LLM
         val llmResult = polishTextWithLlm(rawTranscription, apiKey, provider)
 
         val finalOutput = if (llmResult.isSuccess) {
             val polished = llmResult.getOrThrow()
-            Log.d(TAG, "POLISHED LLM: '$polished'")
+            Log.d(TAG, "POLISHED LLM: ${polished.length} caratteri")
             PipelineOutput(text = sanitizeAndFormatText(polished), isFallback = false)
         } else {
             val err = llmResult.exceptionOrNull()?.message ?: "Errore sconosciuto"
@@ -93,7 +90,6 @@ class AiPipelineClient(private val prefs: PreferencesManager) {
     }
 
     private var cachedGeminiModel: String? = null
-    private var cachedGroqModel: String? = null
 
     private fun processGeminiMultimodalAudio(audioFile: File, apiKey: String): Result<String> {
         val audioBytes = try {
@@ -104,33 +100,17 @@ class AiPipelineClient(private val prefs: PreferencesManager) {
 
         val base64Audio = android.util.Base64.encodeToString(audioBytes, android.util.Base64.NO_WRAP)
         
-        // 1. Costruiamo la lista candidati ordinata: cache -> modelli attivi scoperti da ListModels -> default 2026
-        val candidateModels = mutableListOf<String>()
-        cachedGeminiModel?.let { candidateModels.add(it) }
-
-        val discoveredList = discoverActiveGeminiModels(apiKey)
-        for (m in discoveredList) {
-            if (!candidateModels.contains(m)) {
-                candidateModels.add(m)
-            }
-        }
-
-        val defaultFallbacks = listOf(
-            "gemini-3.5-flash-lite",
-            "gemini-3.5-flash",
-            "gemini-3.8-flash",
-            "gemini-2.5-flash",
-            "gemini-2.0-flash"
-        )
-        for (f in defaultFallbacks) {
-            if (!candidateModels.contains(f) && !candidateModels.contains("models/$f")) {
-                candidateModels.add(f)
-            }
-        }
+        // Candidati in ordine: cache -> ListModels -> default. La sequenza è lazy: ListModels (un round trip)
+        // parte solo se il modello in cache non basta, e i tentativi sono limitati perché ognuno ricarica l'audio.
+        val candidateModels = sequence {
+            cachedGeminiModel?.let { yield(it) }
+            yieldAll(discoverActiveGeminiModels(apiKey))
+            yieldAll(GEMINI_DEFAULT_MODELS)
+        }.map { it.removePrefix("models/") }.distinct().take(MAX_GEMINI_ATTEMPTS)
 
         var lastError: Exception? = null
         for (modelName in candidateModels) {
-            val path = if (modelName.startsWith("models/")) modelName else "models/$modelName"
+            val path = "models/$modelName"
             val vocab = prefs.customVocabulary
             val systemInstruction = if (vocab.isNotBlank()) {
                 "${prefs.activePreset.prompt}\n\nGLOSSARIO E TERMINI PERSONALIZZATI (usa sempre l'ortografia esatta di questi nomi/termini):\n$vocab"
@@ -162,13 +142,15 @@ class AiPipelineClient(private val prefs: PreferencesManager) {
                 })
                 put("generationConfig", JSONObject().apply {
                     put("temperature", 0.2)
-                    put("maxOutputTokens", 1200)
+                    // Cresce con la durata (~64 kbps): un tetto fisso taglia le dettature lunghe
+                    put("maxOutputTokens", maxOf(1200, audioBytes.size / 50))
                 })
             }
 
             val jsonMediaType = "application/json; charset=utf-8".toMediaType()
             val request = Request.Builder()
-                .url("https://generativelanguage.googleapis.com/v1beta/$path:generateContent?key=${apiKey.trim()}")
+                .url("https://generativelanguage.googleapis.com/v1beta/$path:generateContent")
+                .header("x-goog-api-key", apiKey.trim())
                 .post(payload.toString().toRequestBody(jsonMediaType))
                 .build()
 
@@ -180,7 +162,13 @@ class AiPipelineClient(private val prefs: PreferencesManager) {
                     val json = JSONObject(responseBody)
                     val candidates = json.optJSONArray("candidates")
                     if (candidates != null && candidates.length() > 0) {
-                        val content = candidates.getJSONObject(0).optJSONObject("content")
+                        val first = candidates.getJSONObject(0)
+                        if (first.optString("finishReason") == "MAX_TOKENS") {
+                            // Testo tagliato: meglio un altro modello che una dettatura inserita a metà
+                            lastError = IOException("Gemini ($modelName): risposta troncata (MAX_TOKENS)")
+                            continue
+                        }
+                        val content = first.optJSONObject("content")
                         val parts = content?.optJSONArray("parts")
                         if (parts != null && parts.length() > 0) {
                             val text = parts.getJSONObject(0).optString("text", "").trim()
@@ -199,6 +187,8 @@ class AiPipelineClient(private val prefs: PreferencesManager) {
                     if (cachedGeminiModel == modelName) {
                         cachedGeminiModel = null
                     }
+                    // Chiave non valida o accesso negato: ogni altro modello darebbe lo stesso errore
+                    if (response.code == 401 || response.code == 403 || responseBody.contains("API_KEY_INVALID")) break
                 }
             } catch (e: Exception) {
                 lastError = e
@@ -210,10 +200,12 @@ class AiPipelineClient(private val prefs: PreferencesManager) {
     }
 
     private fun discoverActiveGeminiModels(apiKey: String): List<String> {
-        val cleanKey = apiKey.trim()
-        val url = "https://generativelanguage.googleapis.com/v1beta/models?key=$cleanKey&pageSize=100"
         return try {
-            val request = Request.Builder().url(url).get().build()
+            val request = Request.Builder()
+                .url("https://generativelanguage.googleapis.com/v1beta/models?pageSize=100")
+                .header("x-goog-api-key", apiKey.trim())
+                .get()
+                .build()
             val response = httpClient.newCall(request).execute()
             val body = response.body?.string() ?: ""
             if (!response.isSuccessful) {
@@ -344,7 +336,6 @@ class AiPipelineClient(private val prefs: PreferencesManager) {
                     val res = executeLlmCall(rawText, cleanKey, cleanBaseUrl, candidate)
                     if (res.isSuccess) {
                         Log.i(TAG, "Fallback Groq riuscito con $candidate!")
-                        cachedGroqModel = candidate
                         return res
                     }
                 }
@@ -418,7 +409,9 @@ class AiPipelineClient(private val prefs: PreferencesManager) {
             put("model", modelName)
             put("messages", messagesArray)
             put("temperature", 0.3)
-            put("max_tokens", 800) // 800 token riducono la riserva TPM del 60%, azzerando il rischio di HTTP 429 su Groq
+            // Minimo 800: tiene bassa la riserva TPM di Groq (niente HTTP 429). Cresce col testo perché l'output è
+            // lungo quanto l'input e un tetto fisso taglia le dettature lunghe (1 token >= 1 carattere).
+            put("max_tokens", maxOf(800, rawText.length).coerceAtMost(4000))
         }
 
         val jsonMediaType = "application/json; charset=utf-8".toMediaType()
@@ -440,7 +433,11 @@ class AiPipelineClient(private val prefs: PreferencesManager) {
             val json = JSONObject(responseBody)
             val choices = json.optJSONArray("choices")
             if (choices != null && choices.length() > 0) {
-                val messageObj = choices.getJSONObject(0).optJSONObject("message")
+                val choice = choices.getJSONObject(0)
+                if (choice.optString("finish_reason") == "length") {
+                    return Result.failure(IOException("Risposta LLM troncata da $modelName (max_tokens)"))
+                }
+                val messageObj = choice.optJSONObject("message")
                 val content = messageObj?.optString("content", "")?.trim() ?: ""
                 if (content.isNotBlank()) {
                     Result.success(content)
@@ -459,6 +456,14 @@ class AiPipelineClient(private val prefs: PreferencesManager) {
 
     companion object {
         private const val TAG = "AiPipelineClient"
+        private const val MAX_GEMINI_ATTEMPTS = 4
+        private val GEMINI_DEFAULT_MODELS = listOf(
+            "gemini-3.5-flash-lite",
+            "gemini-3.5-flash",
+            "gemini-3.8-flash",
+            "gemini-2.5-flash",
+            "gemini-2.0-flash"
+        )
 
         /**
          * Sanitizzazione deterministica e Garanzia di Qualità Tipografica (Wispr Engine):
@@ -474,8 +479,9 @@ class AiPipelineClient(private val prefs: PreferencesManager) {
             var clean = output.trim()
 
             // 1. Rimuove prefissi spuri
+            // "Broadcast" è un'allucinazione di Whisper; \b evita di tagliare parole vere come "Broadcasting"
+            clean = clean.replace(Regex("""^Broadcast\b\s*:?\s*""", RegexOption.IGNORE_CASE), "")
             val prefixesToRemove = listOf(
-                "Broadcast:", "Broadcast :", "Broadcast",
                 "Message:", "Message :", "Messaggio:", "Messaggio :",
                 "Testo:", "Testo :", "Trascrizione:", "Output:",
                 "Ecco il testo:", "Ecco la trascrizione:", "Ecco il testo formattato:", "Ecco il racconto:"
@@ -514,7 +520,9 @@ class AiPipelineClient(private val prefs: PreferencesManager) {
 
             // 6. Deduplicazione automatica parole consecutive (elimina balbettii con pause, virgole o spazi)
             // Usa \p{L} per supportare qualsiasi carattere Unicode (inclusi accenti italiani: à è é ì ò ù)
-            val duplicateSingleWordRegex = Regex("""\b(\p{L}+)[\s,.;:-]+\1\b""", RegexOption.IGNORE_CASE)
+            // Separatori solo spazio/virgola: un punto o un a capo divide due frasi ("Ho visto Anna. Anna ha detto...")
+            // Lookaround al posto di \b: da JDK 19 \b è solo ASCII e non riconosce "però" (su Android/ICU sì)
+            val duplicateSingleWordRegex = Regex("""(?<!\p{L})(\p{L}+)[ \t,]+\1(?!\p{L})""", RegexOption.IGNORE_CASE)
             var singleWordIter = 0
             while (duplicateSingleWordRegex.containsMatchIn(clean) && singleWordIter < 10) {
                 val updated = clean.replace(duplicateSingleWordRegex) { match -> match.groupValues[1] }
@@ -524,7 +532,7 @@ class AiPipelineClient(private val prefs: PreferencesManager) {
             }
 
             // Deduplicazione per frasi di due parole duplicate consecutive (es. "sto facendo, sto facendo" -> "sto facendo")
-            val duplicateTwoWordsRegex = Regex("""\b(\p{L}+[\s,]+\p{L}+)[\s,.;:-]+\1\b""", RegexOption.IGNORE_CASE)
+            val duplicateTwoWordsRegex = Regex("""(?<!\p{L})(\p{L}+[ \t,]+\p{L}+)[ \t,]+\1(?!\p{L})""", RegexOption.IGNORE_CASE)
             var twoWordsIter = 0
             while (duplicateTwoWordsRegex.containsMatchIn(clean) && twoWordsIter < 10) {
                 val updated = clean.replace(duplicateTwoWordsRegex) { match -> match.groupValues[1] }
@@ -545,7 +553,8 @@ class AiPipelineClient(private val prefs: PreferencesManager) {
             clean = clean.replace(Regex("""[^\S\r\n]{2,}"""), " ")
 
             // 7. Forza MAIUSCOLA dopo ogni punto (. ! ?) anche in presenza di virgolette o parentesi
-            clean = clean.replace(Regex("""([.!?]\s*["'«“‘(\[]?\s*)([\p{Ll}])""")) { match ->
+            // \s+ (non \s*): senza spazio il punto è parte di un dominio o di un'email (gmail.com, www.sito.it)
+            clean = clean.replace(Regex("""([.!?]\s+["'«“‘(\[]?\s*)([\p{Ll}])""")) { match ->
                 match.groupValues[1] + match.groupValues[2].uppercase()
             }
 

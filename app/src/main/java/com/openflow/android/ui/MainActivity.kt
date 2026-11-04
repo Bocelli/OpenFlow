@@ -1315,7 +1315,7 @@ fun SwitchSettingRow(
     }
 }
 
-private fun isAccessibilityServiceEnabled(context: Context): Boolean {
+internal fun isAccessibilityServiceEnabled(context: Context): Boolean {
     if (FlowAccessibilityService.instance != null) return true
     val am = context.getSystemService(Context.ACCESSIBILITY_SERVICE) as? AccessibilityManager ?: return false
     val enabledServices = am.getEnabledAccessibilityServiceList(AccessibilityServiceInfo.FEEDBACK_ALL_MASK)

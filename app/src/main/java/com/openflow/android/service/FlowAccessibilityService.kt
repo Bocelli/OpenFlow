@@ -15,13 +15,16 @@ import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
 import android.view.accessibility.AccessibilityWindowInfo
 import com.openflow.android.ai.AiPipelineClient
+import com.openflow.android.ai.PipelineOutput
 import com.openflow.android.audio.AudioRecorderManager
 import com.openflow.android.data.PreferencesManager
 import com.openflow.android.ui.BubbleState
 import com.openflow.android.ui.FloatingBubbleOverlay
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 
 class FlowAccessibilityService : AccessibilityService() {
@@ -35,7 +38,6 @@ class FlowAccessibilityService : AccessibilityService() {
     private var bubbleOverlay: FloatingBubbleOverlay? = null
 
     private var activeTargetNode: AccessibilityNodeInfo? = null
-    private var currentContextText: String? = null
 
     private val hideBubbleRunnable = Runnable {
         if (!prefs.showOnlyWhenFocused || bubbleOverlay?.currentState != BubbleState.IDLE) return@Runnable
@@ -106,14 +108,6 @@ class FlowAccessibilityService : AccessibilityService() {
         }
     }
 
-    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        when (intent?.action) {
-            ACTION_SHOW_BUBBLE -> triggerShowBubble()
-            ACTION_HIDE_BUBBLE -> triggerHideBubble()
-        }
-        return START_STICKY
-    }
-
     fun triggerShowBubble() {
         mainHandler.removeCallbacks(hideBubbleRunnable)
         ensureOverlayInitialized()
@@ -155,7 +149,6 @@ class FlowAccessibilityService : AccessibilityService() {
         val source = event.source
 
         try {
-            Log.d(TAG, "onEvent: type=${event.eventType}, pkg=$pkg, cls=$cls")
             ensureOverlayInitialized()
 
             val keyboardOpen = isKeyboardVisible()
@@ -185,7 +178,6 @@ class FlowAccessibilityService : AccessibilityService() {
             if (hasActiveInput) {
                 // Risveglio immediato dallo Stealth Mode (28% -> 100% di opacità):
                 // L'utente ha la tastiera aperta o sta digitando su Facebook, YouTube, WhatsApp, BlueMail, ecc.
-                Log.d(TAG, "Input/Tastiera attiva rilevata ($pkg, kb=$keyboardOpen, input=$eventIsInput): risveglio Stealth Mode al 100%")
                 mainHandler.removeCallbacks(hideBubbleRunnable)
                 bubbleOverlay?.wakeUpFromStealth()
                 bubbleOverlay?.cancelStealth()
@@ -215,21 +207,10 @@ class FlowAccessibilityService : AccessibilityService() {
      */
     private fun isKeyboardVisible(): Boolean {
         return try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-                val tempRect = android.graphics.Rect()
-                val winList = windows
-                Log.d(TAG, "isKeyboardVisible: windows count=${winList.size}")
-                winList.any { window ->
-                    window.getBoundsInScreen(tempRect)
-                    Log.d(TAG, "window: type=${window.type}, bounds=$tempRect")
-                    if (window.type == AccessibilityWindowInfo.TYPE_INPUT_METHOD) {
-                        tempRect.height() > 100
-                    } else {
-                        false
-                    }
-                }
-            } else {
-                false
+            val tempRect = android.graphics.Rect()
+            windows.any { window ->
+                window.getBoundsInScreen(tempRect)
+                window.type == AccessibilityWindowInfo.TYPE_INPUT_METHOD && tempRect.height() > 100
             }
         } catch (e: Exception) {
             Log.e(TAG, "isKeyboardVisible error: ${e.message}")
@@ -297,10 +278,11 @@ class FlowAccessibilityService : AccessibilityService() {
     }
 
     private fun updateActiveTarget(node: AccessibilityNodeInfo) {
+        // Stesso nodo: riciclarlo prima di obtain() lo copierebbe già riciclato (Android < 13)
+        if (node === activeTargetNode) return
         try {
             activeTargetNode?.recycle()
             activeTargetNode = AccessibilityNodeInfo.obtain(node)
-            currentContextText = getSanitizedFieldText(node).ifBlank { null }
         } catch (_: Exception) {}
     }
 
@@ -331,30 +313,42 @@ class FlowAccessibilityService : AccessibilityService() {
         }
 
         serviceScope.launch {
-            val response = aiClient.processSpeechToPolishedText(recordedFile, currentContextText)
-            recordedFile.delete()
+            // Qualsiasi eccezione imprevista (es. header non valido) senza questo catch crasha l'app
+            // e lascia la bolla bloccata su PROCESSING.
+            val response: Result<PipelineOutput> = try {
+                aiClient.processSpeechToPolishedText(recordedFile)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Result.failure(e)
+            } finally {
+                recordedFile.delete()
+            }
 
             response.onSuccess { output ->
-                val textToInsert = if (output.isFallback && output.errorMessage != null) {
+                if (output.isFallback && output.errorMessage != null) {
                     showNotificationAlert("⚠️ OpenFlow: Fallito LLM", output.errorMessage)
-                    "[⚠️ Fallback Whisper - Errore LLM: ${output.errorMessage}]\n\n${output.text}"
-                } else {
-                    output.text
                 }
 
-                if (textToInsert.isNotBlank()) {
-                    insertTextIntoActiveField(textToInsert)
-                    bubbleOverlay?.updateState(BubbleState.SUCCESS)
-                    try {
-                        com.openflow.android.data.TranscriptionHistoryManager(this@FlowAccessibilityService).add(
-                            text = textToInsert,
-                            provider = prefs.activeProvider.name,
-                            preset = prefs.activePreset.name
-                        )
-                    } catch (_: Exception) {}
-                } else {
-                    bubbleOverlay?.updateState(BubbleState.IDLE)
+                if (output.text.isBlank()) {
+                    // Gemini fallito (nessun testo) oppure registrazione vuota
+                    bubbleOverlay?.updateState(if (output.errorMessage != null) BubbleState.ERROR else BubbleState.IDLE)
+                    return@onSuccess
                 }
+
+                // Il dettaglio dell'errore sta nella notifica: nel campo (cioè nel messaggio che l'utente
+                // potrebbe inviare) e nella cronologia va solo un marcatore breve.
+                insertTextIntoActiveField(
+                    if (output.isFallback) "[⚠️ Fallback Whisper: LLM non disponibile]\n\n${output.text}" else output.text
+                )
+                bubbleOverlay?.updateState(BubbleState.SUCCESS)
+                try {
+                    com.openflow.android.data.TranscriptionHistoryManager(this@FlowAccessibilityService).add(
+                        text = output.text,
+                        provider = prefs.activeProvider.name,
+                        preset = prefs.activePreset.name
+                    )
+                } catch (_: Exception) {}
             }.onFailure { error ->
                 Log.e(TAG, "Errore AI Pipeline: ${error.message}", error)
                 showNotificationAlert("❌ OpenFlow: Errore Registrazione/AI", error.message ?: "Errore sconosciuto")
@@ -584,6 +578,7 @@ class FlowAccessibilityService : AccessibilityService() {
 
     override fun onDestroy() {
         instance = null
+        serviceScope.cancel()
         mainHandler.removeCallbacksAndMessages(null)
         bubbleOverlay?.destroy()
         audioRecorder.cancelRecording()
@@ -596,8 +591,6 @@ class FlowAccessibilityService : AccessibilityService() {
 
     companion object {
         private const val TAG = "FlowAccessibilityService"
-        const val ACTION_SHOW_BUBBLE = "com.openflow.android.SHOW_BUBBLE"
-        const val ACTION_HIDE_BUBBLE = "com.openflow.android.HIDE_BUBBLE"
         private const val NOTIFICATION_PERSISTENT_ID = 1002
 
         var instance: FlowAccessibilityService? = null

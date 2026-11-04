@@ -8,6 +8,7 @@ import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
+import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.openflow.android.R
 
@@ -16,10 +17,16 @@ class AudioRecordService : Service() {
     override fun onCreate() {
         super.onCreate()
         createNotificationChannel()
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            startForeground(NOTIFICATION_ID, createNotification(), ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE)
-        } else {
-            startForeground(NOTIFICATION_ID, createNotification())
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                startForeground(NOTIFICATION_ID, createNotification(), ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE)
+            } else {
+                startForeground(NOTIFICATION_ID, createNotification())
+            }
+        } catch (e: Exception) {
+            // Android 12+ può negare il servizio in primo piano mentre l'app è in background: non deve far crollare l'app
+            Log.w(TAG, "startForeground negato: ${e.message}")
+            stopSelf()
         }
     }
 
@@ -51,6 +58,7 @@ class AudioRecordService : Service() {
     }
 
     companion object {
+        private const val TAG = "AudioRecordService"
         private const val CHANNEL_ID = "openflow_mic_channel"
         private const val NOTIFICATION_ID = 1001
     }

@@ -8,6 +8,13 @@
 
 ## Change Log
 - **2026-11-04**:
+  - Ponytail audit of the whole repo and fixes:
+    - `sanitizeAndFormatText`: duplicate-word removal no longer crosses `.`/newlines ("Anna. Anna" kept); no capital after a dot without a space (`gmail.com`, `www.sito.it`); `Broadcast` prefix stripped only as a whole word. Tests added in `PromptPresetTest.kt`.
+    - LLM output truncation: `max_tokens` / `maxOutputTokens` scale with the input; `finish_reason=length` / `MAX_TOKENS` is treated as failure (falls back to raw Whisper) instead of inserting half a dictation.
+    - Gemini: ListModels runs only when the cached model fails, at most 4 attempts, stops on invalid key / 403; API key sent in the `x-goog-api-key` header instead of the URL.
+    - `FlowAccessibilityService`: pipeline exceptions no longer crash the app or freeze the bubble in PROCESSING; audio file always deleted; scope cancelled in `onDestroy`; error detail only in the notification (not typed into the field or saved in History Vault); dictated text and per-event window info removed from logcat; removed unused field-text capture (`currentContextText`) and `onStartCommand`.
+    - `AudioRecorderManager`/`AudioRecordService`: any start failure (mic busy, FGS denied) is handled instead of crashing; failed recorder is released.
+    - `allowBackup=false` (History Vault and prefs must not go to cloud backup); `local.properties` untracked; OEM battery intents no longer filtered by `resolveActivity` on Android 11+; removed redundant `org.json` dependency, unused pref keys and the duplicated `isAccessibilityServiceEnabled`.
   - Initialized repository, completed Agent Reach research on Wispr Flow alternatives.
   - Completed conceptual map and architectural blueprint in `trail_audit_and_architecture.md`.
   - Conducted UI interview: selected auto-popup bubble on focus, hybrid tap/push-to-talk, and Wispr Dark aesthetic.

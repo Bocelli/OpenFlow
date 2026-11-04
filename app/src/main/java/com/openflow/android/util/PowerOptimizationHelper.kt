@@ -304,12 +304,12 @@ object PowerOptimizationHelper {
             )
         }
 
+        // Niente resolveActivity(): da Android 11 (package visibility) ritorna null per i package OEM non
+        // dichiarati in <queries>, mentre startActivity() con componente esplicito funziona o lancia.
         for (intent in candidates) {
             try {
-                if (intent.resolveActivity(context.packageManager) != null) {
-                    context.startActivity(intent)
-                    return true
-                }
+                context.startActivity(intent)
+                return true
             } catch (e: Exception) {
                 Log.d(TAG, "Tentativo intent OEM fallito: ${e.message}")
             }
@@ -317,13 +317,10 @@ object PowerOptimizationHelper {
 
         // Fallback 1: Schermata generale ottimizzazioni batteria
         try {
-            val generalBattery = Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS).apply {
+            context.startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS).apply {
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK
-            }
-            if (generalBattery.resolveActivity(context.packageManager) != null) {
-                context.startActivity(generalBattery)
-                return true
-            }
+            })
+            return true
         } catch (_: Exception) {}
 
         // Fallback 2: Dettagli applicazione
