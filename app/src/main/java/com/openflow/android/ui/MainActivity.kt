@@ -54,6 +54,7 @@ import com.openflow.android.data.ApiProvider
 import com.openflow.android.data.PreferencesManager
 import com.openflow.android.data.PromptPreset
 import com.openflow.android.service.FlowAccessibilityService
+import com.openflow.android.util.PowerOptimizationHelper
 
 // Swiss Minimalist & Modern Technical Dark Palette (Anti-Slop)
 val CanvasBg = Color(0xFF0C0D0F)
@@ -141,6 +142,9 @@ fun MainSettingsScreen(
     var hasAccessibilityPermission by remember {
         mutableStateOf(isAccessibilityServiceEnabled(context))
     }
+    var isBatteryOptIgnored by remember {
+        mutableStateOf(PowerOptimizationHelper.isIgnoringBatteryOptimizations(context))
+    }
 
     var activeProvider by remember { mutableStateOf(prefs.activeProvider) }
     var openAiKey by remember { mutableStateOf(prefs.openAiKey) }
@@ -165,6 +169,7 @@ fun MainSettingsScreen(
         hasOverlayPermission = Settings.canDrawOverlays(context)
         hasAccessibilityPermission = isAccessibilityServiceEnabled(context)
         hasMicPermission = ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
+        isBatteryOptIgnored = PowerOptimizationHelper.isIgnoringBatteryOptimizations(context)
         if (FlowAccessibilityService.instance != null && !prefs.showOnlyWhenFocused) {
             FlowAccessibilityService.instance?.triggerShowBubble()
         }
@@ -214,7 +219,7 @@ fun MainSettingsScreen(
                         }
 
                         // Status Badge in Top Bar
-                        val isFullyConfigured = hasAccessibilityPermission && hasMicPermission
+                        val isFullyConfigured = hasAccessibilityPermission && hasMicPermission && isBatteryOptIgnored
                         val statusBg = if (isFullyConfigured) StatusEmerald.copy(alpha = 0.12f) else StatusAmber.copy(alpha = 0.12f)
                         val statusText = if (isFullyConfigured) StatusEmerald else StatusAmber
 
@@ -506,6 +511,8 @@ fun MainSettingsScreen(
                     hasAccessibility = hasAccessibilityPermission,
                     hasMic = hasMicPermission,
                     hasOverlay = hasOverlayPermission,
+                    isBatteryOptIgnored = isBatteryOptIgnored,
+                    isXiaomiDevice = PowerOptimizationHelper.isXiaomiDevice(),
                     onOpenAccessibility = {
                         context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
                     },
@@ -516,6 +523,12 @@ fun MainSettingsScreen(
                             Uri.parse("package:${context.packageName}")
                         )
                         context.startActivity(intent)
+                    },
+                    onRequestBatteryOpt = {
+                        PowerOptimizationHelper.requestIgnoreBatteryOptimizations(context)
+                    },
+                    onOpenXiaomiAutostart = {
+                        PowerOptimizationHelper.openXiaomiAutostartSettings(context)
                     }
                 )
             }
@@ -958,9 +971,13 @@ fun SystemStatusCard(
     hasAccessibility: Boolean,
     hasMic: Boolean,
     hasOverlay: Boolean,
+    isBatteryOptIgnored: Boolean,
+    isXiaomiDevice: Boolean,
     onOpenAccessibility: () -> Unit,
     onRequestMic: () -> Unit,
-    onRequestOverlay: () -> Unit
+    onRequestOverlay: () -> Unit,
+    onRequestBatteryOpt: () -> Unit,
+    onOpenXiaomiAutostart: () -> Unit
 ) {
     Column(
         modifier = Modifier
@@ -989,6 +1006,23 @@ fun SystemStatusCard(
             isGranted = hasOverlay,
             onClick = onRequestOverlay
         )
+        HorizontalDivider(color = HairlineBorder.copy(alpha = 0.6f), thickness = 1.dp)
+        StatusRow(
+            title = "Standby & Risparmio Batteria",
+            subtitle = "Consente l'esecuzione senza restrizioni per evitare freeze in standby",
+            isGranted = isBatteryOptIgnored,
+            onClick = onRequestBatteryOpt
+        )
+        if (isXiaomiDevice) {
+            HorizontalDivider(color = HairlineBorder.copy(alpha = 0.6f), thickness = 1.dp)
+            StatusRow(
+                title = "⚡ Avvio Automatico Xiaomi / HyperOS",
+                subtitle = "Protegge OpenFlow dalla pulizia aggressiva MIUI",
+                isGranted = false,
+                actionText = "Configura",
+                onClick = onOpenXiaomiAutostart
+            )
+        }
     }
 }
 
@@ -997,6 +1031,7 @@ fun StatusRow(
     title: String,
     subtitle: String,
     isGranted: Boolean,
+    actionText: String = "Abilita",
     onClick: () -> Unit
 ) {
     Row(
@@ -1039,7 +1074,7 @@ fun StatusRow(
                     .clickable { onClick() }
                     .padding(horizontal = 10.dp, vertical = 5.dp)
             ) {
-                Text("Abilita", fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = TextPrimary)
+                Text(actionText, fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = TextPrimary)
             }
         }
     }

@@ -74,6 +74,7 @@ class FlowAccessibilityService : AccessibilityService() {
         prefs = PreferencesManager(this)
         audioRecorder = AudioRecorderManager(this)
         aiClient = AiPipelineClient(prefs)
+        showOngoingNotification()
         Log.d(TAG, "FlowAccessibilityService onCreate")
     }
 
@@ -81,6 +82,7 @@ class FlowAccessibilityService : AccessibilityService() {
         super.onServiceConnected()
         instance = this
         Log.d(TAG, "FlowAccessibilityService onServiceConnected!")
+        showOngoingNotification()
 
         val info = serviceInfo ?: AccessibilityServiceInfo()
         info.eventTypes = AccessibilityEvent.TYPE_VIEW_FOCUSED or
@@ -352,76 +354,110 @@ class FlowAccessibilityService : AccessibilityService() {
         }
     }
 
-    private fun insertTextIntoActiveField(newText: String) {
+    private suspend fun insertTextIntoActiveField(newText: String) {
         // Salvagente universale: copia sempre il testo formattato negli appunti
         copyToClipboard(newText)
 
-        var target: AccessibilityNodeInfo? = activeTargetNode
-        var needsRecycleTarget = false
+        // Retry loop con ritardi progressivi (0ms, 85ms, 170ms)
+        // Risolve alla radice il problema delle trascrizioni brevi ("Ok", "Sì"):
+        // evita la race condition dove la risposta del modello arriva in ~200ms prima
+        // che la finestra sottostante (WhatsApp, Facebook, Gboard) abbia ripreso il focus di input.
+        val retryDelays = listOf(0L, 85L, 170L)
+        var successfullyInserted = false
 
-        // 1. Cerca il nodo con focus di input attivo nella finestra corrente
-        if (target == null || !target.refresh()) {
+        for ((attemptIndex, delayMs) in retryDelays.withIndex()) {
+            if (delayMs > 0) {
+                kotlinx.coroutines.delay(delayMs)
+            }
+
+            var target: AccessibilityNodeInfo? = null
+            var needsRecycleTarget = false
+
             try {
+                // 1. Cerca il nodo con focus di input attivo nella finestra in primo piano (attiva)
                 val root = rootInActiveWindow
                 if (root != null) {
-                    target = root.findFocus(AccessibilityNodeInfo.FOCUS_INPUT)
-                        ?: root.findFocus(AccessibilityNodeInfo.FOCUS_ACCESSIBILITY)
-                    needsRecycleTarget = true
+                    val rootPkg = root.packageName?.toString()?.lowercase() ?: ""
+                    if (!rootPkg.contains("launcher") && !rootPkg.contains("globallauncher") && !rootPkg.contains("systemui")) {
+                        val focused = root.findFocus(AccessibilityNodeInfo.FOCUS_INPUT)
+                            ?: root.findFocus(AccessibilityNodeInfo.FOCUS_ACCESSIBILITY)
+                        if (focused != null) {
+                            target = focused
+                            needsRecycleTarget = true
+                        }
+                    }
                     root.recycle()
                 }
-            } catch (_: Exception) {}
-        }
 
-        // 2. Cerca in tutte le finestre interattive (per popup, dialog, bottom-sheet di Facebook, YouTube, BlueMail)
-        if (target == null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-            try {
-                for (window in windows) {
-                    val root = window.root ?: continue
-                    val focused = root.findFocus(AccessibilityNodeInfo.FOCUS_INPUT)
-                        ?: root.findFocus(AccessibilityNodeInfo.FOCUS_ACCESSIBILITY)
-                    root.recycle()
-                    if (focused != null) {
-                        target = focused
-                        needsRecycleTarget = true
-                        break
+                // 2. Se non ancora agganciato, usa il target salvato dall'ultimo tocco dell'utente
+                if (target == null && activeTargetNode != null) {
+                    if (activeTargetNode?.refresh() == true) {
+                        target = activeTargetNode
+                        needsRecycleTarget = false
                     }
                 }
-            } catch (_: Exception) {}
+
+                // 3. Fallback per dialog, popup e bottom-sheet multischeda
+                if (target == null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                    for (window in windows) {
+                        val winRoot = window.root ?: continue
+                        val focused = winRoot.findFocus(AccessibilityNodeInfo.FOCUS_INPUT)
+                            ?: winRoot.findFocus(AccessibilityNodeInfo.FOCUS_ACCESSIBILITY)
+                        winRoot.recycle()
+                        if (focused != null) {
+                            target = focused
+                            needsRecycleTarget = true
+                            break
+                        }
+                    }
+                }
+
+                if (target == null) {
+                    Log.d(TAG, "Tentativo $attemptIndex: nessun nodo con focus trovato")
+                    continue
+                }
+
+                // RIPRISTINO DEL FOCUS: essenziale per far accettare ACTION_SET_TEXT e ACTION_PASTE
+                if (!target.isFocused) {
+                    target.performAction(AccessibilityNodeInfo.ACTION_FOCUS)
+                }
+
+                // Tentativo 1: ACTION_SET_TEXT con eventuale testo pre-esistente
+                val existingText = getSanitizedFieldText(target)
+                val finalText = if (existingText.isNotBlank()) {
+                    if (existingText.endsWith(" ")) "$existingText$newText" else "$existingText $newText"
+                } else {
+                    newText
+                }
+
+                val arguments = Bundle().apply {
+                    putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, finalText)
+                }
+                var inserted = target.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, arguments)
+
+                // Tentativo 2: Fallback diretto ACTION_PASTE (indispensabile per WebViews di BlueMail, React Native di Facebook, YouTube)
+                if (!inserted) {
+                    inserted = target.performAction(AccessibilityNodeInfo.ACTION_PASTE)
+                }
+
+                Log.d(TAG, "Tentativo $attemptIndex inserimento testo: inserted=$inserted in ${target.className}")
+
+                if (inserted) {
+                    successfullyInserted = true
+                    updateActiveTarget(target)
+                    break
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Eccezione tentativo $attemptIndex inserimento testo: ${e.message}", e)
+            } finally {
+                if (needsRecycleTarget) {
+                    try { target?.recycle() } catch (_: Exception) {}
+                }
+            }
         }
 
-        if (target == null) {
-            Log.d(TAG, "Nessun nodo attivo trovato: testo salvato negli appunti")
-            return
-        }
-
-        try {
-            var inserted = false
-
-            // Tentativo 1: ACTION_SET_TEXT con eventuale testo pre-esistente
-            val existingText = getSanitizedFieldText(target)
-            val finalText = if (existingText.isNotBlank()) {
-                if (existingText.endsWith(" ")) "$existingText$newText" else "$existingText $newText"
-            } else {
-                newText
-            }
-
-            val arguments = Bundle().apply {
-                putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, finalText)
-            }
-            inserted = target.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, arguments)
-
-            // Tentativo 2: Fallback diretto ACTION_PASTE (indispensabile per WebViews di BlueMail, React Native di Facebook, YouTube)
-            if (!inserted) {
-                inserted = target.performAction(AccessibilityNodeInfo.ACTION_PASTE)
-            }
-
-            Log.d(TAG, "Risultato inserimento testo: inserted=$inserted in ${target.className}")
-        } catch (e: Exception) {
-            Log.e(TAG, "Eccezione inserimento testo: ${e.message}", e)
-        } finally {
-            if (needsRecycleTarget) {
-                try { target.recycle() } catch (_: Exception) {}
-            }
+        if (!successfullyInserted) {
+            Log.w(TAG, "Inserimento diretto non riuscito dopo tutti i tentativi: il testo rimane pronto negli appunti della tastiera.")
         }
     }
 
@@ -474,6 +510,57 @@ class FlowAccessibilityService : AccessibilityService() {
         clipboard.setPrimaryClip(clip)
     }
 
+    private fun showOngoingNotification() {
+        try {
+            val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as? android.app.NotificationManager ?: return
+            val channelId = "openflow_persistent_service"
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                val channel = android.app.NotificationChannel(
+                    channelId,
+                    "OpenFlow Servizio Attivo",
+                    android.app.NotificationManager.IMPORTANCE_LOW
+                ).apply {
+                    description = "Mantiene attivo OpenFlow per la dettatura vocale continua"
+                    setShowBadge(false)
+                }
+                notificationManager.createNotificationChannel(channel)
+            }
+
+            val launchIntent = packageManager.getLaunchIntentForPackage(packageName) ?: Intent(this, com.openflow.android.ui.MainActivity::class.java)
+            launchIntent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
+            val pendingIntent = android.app.PendingIntent.getActivity(
+                this,
+                0,
+                launchIntent,
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                    android.app.PendingIntent.FLAG_IMMUTABLE or android.app.PendingIntent.FLAG_UPDATE_CURRENT
+                } else {
+                    android.app.PendingIntent.FLAG_UPDATE_CURRENT
+                }
+            )
+
+            val notification = androidx.core.app.NotificationCompat.Builder(this, channelId)
+                .setSmallIcon(com.openflow.android.R.mipmap.ic_launcher)
+                .setContentTitle("OpenFlow")
+                .setContentText("Dettatura vocale IA pronta • Tocca per aprire")
+                .setPriority(androidx.core.app.NotificationCompat.PRIORITY_LOW)
+                .setOngoing(true)
+                .setContentIntent(pendingIntent)
+                .build()
+
+            notificationManager.notify(NOTIFICATION_PERSISTENT_ID, notification)
+        } catch (e: Exception) {
+            Log.e(TAG, "Impossibile mostrare notifica persistente: ${e.message}")
+        }
+    }
+
+    private fun cancelOngoingNotification() {
+        try {
+            val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as? android.app.NotificationManager
+            notificationManager?.cancel(NOTIFICATION_PERSISTENT_ID)
+        } catch (_: Exception) {}
+    }
+
     override fun onInterrupt() {
         bubbleOverlay?.hide()
         audioRecorder.cancelRecording()
@@ -484,6 +571,7 @@ class FlowAccessibilityService : AccessibilityService() {
         mainHandler.removeCallbacksAndMessages(null)
         bubbleOverlay?.destroy()
         audioRecorder.cancelRecording()
+        cancelOngoingNotification()
         try { activeTargetNode?.recycle() } catch (_: Exception) {}
         activeTargetNode = null
         super.onDestroy()
@@ -493,6 +581,7 @@ class FlowAccessibilityService : AccessibilityService() {
         private const val TAG = "FlowAccessibilityService"
         const val ACTION_SHOW_BUBBLE = "com.openflow.android.SHOW_BUBBLE"
         const val ACTION_HIDE_BUBBLE = "com.openflow.android.HIDE_BUBBLE"
+        private const val NOTIFICATION_PERSISTENT_ID = 1002
 
         var instance: FlowAccessibilityService? = null
             private set

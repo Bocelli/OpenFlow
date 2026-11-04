@@ -40,6 +40,7 @@ import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import com.openflow.android.data.ApiProvider
 import com.openflow.android.data.PreferencesManager
+import com.openflow.android.util.PowerOptimizationHelper
 
 /**
  * Percorso di onboarding guidato per OpenFlow.
@@ -69,11 +70,15 @@ fun OnboardingWizard(
     var hasAccessibilityPermission by remember {
         mutableStateOf(isAccessibilityServiceEnabled(context))
     }
+    var isBatteryOptIgnored by remember {
+        mutableStateOf(PowerOptimizationHelper.isIgnoringBatteryOptimizations(context))
+    }
 
     LaunchedEffect(resumeTrigger, currentStep) {
         hasOverlayPermission = Settings.canDrawOverlays(context)
         hasAccessibilityPermission = isAccessibilityServiceEnabled(context)
         hasMicPermission = ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
+        isBatteryOptIgnored = PowerOptimizationHelper.isIgnoringBatteryOptimizations(context)
     }
 
     Scaffold(
@@ -167,6 +172,7 @@ fun OnboardingWizard(
                             hasAccessibility = hasAccessibilityPermission,
                             hasMic = hasMicPermission,
                             hasOverlay = hasOverlayPermission,
+                            isBatteryOptIgnored = isBatteryOptIgnored,
                             onAccessibilityClick = {
                                 context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
                             },
@@ -176,6 +182,12 @@ fun OnboardingWizard(
                                     Uri.parse("package:${context.packageName}")
                                 )
                                 context.startActivity(intent)
+                            },
+                            onBatteryOptClick = {
+                                PowerOptimizationHelper.requestIgnoreBatteryOptimizations(context)
+                            },
+                            onXiaomiAutostartClick = {
+                                PowerOptimizationHelper.openXiaomiAutostartSettings(context)
                             }
                         )
                         3 -> OnboardingStepVocabAndGestures(prefs = prefs)
@@ -495,8 +507,11 @@ private fun OnboardingStepPermissions(
     hasAccessibility: Boolean,
     hasMic: Boolean,
     hasOverlay: Boolean,
+    isBatteryOptIgnored: Boolean,
     onAccessibilityClick: () -> Unit,
-    onOverlayClick: () -> Unit
+    onOverlayClick: () -> Unit,
+    onBatteryOptClick: () -> Unit,
+    onXiaomiAutostartClick: () -> Unit
 ) {
     val micLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
@@ -548,6 +563,24 @@ private fun OnboardingStepPermissions(
             actionLabel = "Abilita Overlay",
             onClick = onOverlayClick
         )
+
+        PermissionStepCard(
+            title = "4. Standby & Risparmio Batteria",
+            description = "Consenti l'esecuzione senza restrizioni per evitare che Xiaomi o Android congelino l'app in standby prolungato.",
+            isGranted = isBatteryOptIgnored,
+            actionLabel = "Consenti Esecuzione",
+            onClick = onBatteryOptClick
+        )
+
+        if (PowerOptimizationHelper.isXiaomiDevice()) {
+            PermissionStepCard(
+                title = "⚡ Avvio Automatico Xiaomi / HyperOS",
+                description = "Consigliato su POCO e Xiaomi: protegge OpenFlow dalla chiusura aggressiva dei processi in background.",
+                isGranted = false,
+                actionLabel = "Apri Impostazioni Xiaomi",
+                onClick = onXiaomiAutostartClick
+            )
+        }
 
         Spacer(modifier = Modifier.height(16.dp))
     }
