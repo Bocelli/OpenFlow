@@ -67,6 +67,12 @@ class AiPipelineClient(private val prefs: PreferencesManager) {
             return@withContext Result.success(PipelineOutput(text = ""))
         }
 
+        // Modalità Whisper Diretto: restituisce immediatamente il testo (~200ms) senza passare dall'LLM
+        if (prefs.activePreset == PromptPreset.RAW_WHISPER) {
+            Log.d(TAG, "RAW_WHISPER attivo: restituzione istantanea senza passaggio LLM (~200ms)")
+            return@withContext Result.success(PipelineOutput(text = sanitizeAndFormatText(rawTranscription), isFallback = false))
+        }
+
         Log.d(TAG, "RAW WHISPER: ${rawTranscription.length} caratteri")
 
         // 2. STADIO 2: Polishing e formattazione con LLM
@@ -103,9 +109,10 @@ class AiPipelineClient(private val prefs: PreferencesManager) {
         // Candidati in ordine: cache -> ListModels -> default. La sequenza è lazy: ListModels (un round trip)
         // parte solo se il modello in cache non basta, e i tentativi sono limitati perché ognuno ricarica l'audio.
         val candidateModels = sequence {
+            prefs.cachedGeminiModel?.let { yield(it) }
             cachedGeminiModel?.let { yield(it) }
-            yieldAll(discoverActiveGeminiModels(apiKey))
             yieldAll(GEMINI_DEFAULT_MODELS)
+            yieldAll(discoverActiveGeminiModels(apiKey))
         }.map { it.removePrefix("models/") }.distinct().take(MAX_GEMINI_ATTEMPTS)
 
         var lastError: Exception? = null
@@ -174,6 +181,7 @@ class AiPipelineClient(private val prefs: PreferencesManager) {
                             val text = parts.getJSONObject(0).optString("text", "").trim()
                             if (text.isNotBlank()) {
                                 cachedGeminiModel = modelName
+                                prefs.cachedGeminiModel = modelName
                                 Log.i(TAG, "Gemini riuscito con successo su modello: $modelName!")
                                 return Result.success(text)
                             }
@@ -186,6 +194,9 @@ class AiPipelineClient(private val prefs: PreferencesManager) {
                     // Se il modello in cache fallisce (es. 503 sovraccarico temporaneo, 429 rate limit o 404), azzera la cache e prova subito il prossimo candidato
                     if (cachedGeminiModel == modelName) {
                         cachedGeminiModel = null
+                    }
+                    if (prefs.cachedGeminiModel == modelName) {
+                        prefs.cachedGeminiModel = null
                     }
                     // Chiave non valida o accesso negato: ogni altro modello darebbe lo stesso errore
                     if (response.code == 401 || response.code == 403 || responseBody.contains("API_KEY_INVALID")) break
@@ -326,9 +337,10 @@ class AiPipelineClient(private val prefs: PreferencesManager) {
         // 2. Per Groq: fallback su modelli attivi della nuova generazione
         if (provider == com.openflow.android.data.ApiProvider.GROQ) {
             val fallbackCandidates = listOf(
-                "openai/gpt-oss-20b",
-                "openai/gpt-oss-120b",
-                "qwen/qwen3.8-27b"
+                "llama-3.1-8b-instant",
+                "llama-3.3-70b-versatile",
+                "llama3-8b-8192",
+                "gemma2-9b-it"
             )
             for (candidate in fallbackCandidates) {
                 if (candidate != provider.llmModel) {
@@ -458,11 +470,11 @@ class AiPipelineClient(private val prefs: PreferencesManager) {
         private const val TAG = "AiPipelineClient"
         private const val MAX_GEMINI_ATTEMPTS = 4
         private val GEMINI_DEFAULT_MODELS = listOf(
-            "gemini-3.5-flash-lite",
-            "gemini-3.5-flash",
-            "gemini-3.8-flash",
             "gemini-2.5-flash",
-            "gemini-2.0-flash"
+            "gemini-2.0-flash",
+            "gemini-1.5-flash",
+            "gemini-2.5-flash-lite",
+            "gemini-2.0-flash-lite"
         )
 
         /**

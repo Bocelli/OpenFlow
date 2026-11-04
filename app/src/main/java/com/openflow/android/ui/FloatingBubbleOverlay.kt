@@ -750,12 +750,14 @@ class FloatingBubbleOverlay(
                     if (p != null) {
                         val label = when (p) {
                             PromptPreset.NATURAL -> "WISPR"
+                            PromptPreset.RAW_WHISPER -> "RAW"
                             PromptPreset.AI_PROMPT -> "PROMPT"
                             PromptPreset.PROFESSIONAL -> "PRO"
                             PromptPreset.BULLETS -> "LIST"
                         }
                         val accentColor = when (p) {
                             PromptPreset.NATURAL -> Color.parseColor("#10B981")
+                            PromptPreset.RAW_WHISPER -> Color.parseColor("#38BDF8")
                             PromptPreset.AI_PROMPT -> Color.parseColor("#818CF8")
                             PromptPreset.PROFESSIONAL -> Color.parseColor("#E4E4E7")
                             PromptPreset.BULLETS -> Color.parseColor("#F59E0B")
@@ -770,6 +772,7 @@ class FloatingBubbleOverlay(
                             style = Paint.Style.FILL
                             color = when (prefs.activePreset) {
                                 PromptPreset.NATURAL -> Color.parseColor("#10B981")
+                                PromptPreset.RAW_WHISPER -> Color.parseColor("#38BDF8")
                                 PromptPreset.AI_PROMPT -> Color.parseColor("#818CF8")
                                 PromptPreset.PROFESSIONAL -> Color.parseColor("#E4E4E7")
                                 PromptPreset.BULLETS -> Color.parseColor("#F59E0B")

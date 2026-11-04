@@ -10,13 +10,13 @@ enum class ApiProvider(val displayName: String, val baseUrl: String, val asrMode
         displayName = "Groq (Free LPU ~200ms)",
         baseUrl = "https://api.groq.com/openai/v1",
         asrModel = "whisper-large-v3-turbo",
-        llmModel = "openai/gpt-oss-20b"
+        llmModel = "llama-3.1-8b-instant"
     ),
     GEMINI(
         displayName = "Google Gemini (Free AI Studio)",
         baseUrl = "https://generativelanguage.googleapis.com/v1beta",
         asrModel = "multimodal",
-        llmModel = "gemini-3.8-flash"
+        llmModel = "gemini-2.5-flash"
     ),
     OPENAI(
         displayName = "OpenAI (Wispr Flow Nativo)",
@@ -28,68 +28,42 @@ enum class ApiProvider(val displayName: String, val baseUrl: String, val asrMode
 
 enum class PromptPreset(val title: String, val description: String, val prompt: String) {
     NATURAL(
-        title = "Wispr God-Tier (Formattazione Intelligente)",
-        description = "Paragrafi ariosi, virgolette per citazioni/app, punteggiatura d'autore e rimozione intercalari.",
+        title = "Naturale (Spontaneo per Chat)",
+        description = "Fluido e colloquiale: punteggiatura perfetta, niente schemi rigidi o virgolette forzate.",
         prompt = """
-            Sei il motore editoriale avanzato di Wispr Flow. Riscrivi il parlato spontaneo in un testo scritto in italiano impeccabile, naturale e perfettamente strutturato.
+            Sei il motore di dettatura vocale intelligente di OpenFlow. Trasforma il parlato spontaneo in un messaggio scritto naturale, scorrevole ed espressivo, ideale per chat (WhatsApp, Telegram) o comunicazioni quotidiane.
 
-            REGOLE TASSATIVE:
-            1. STRUTTURA DEI PARAGRAFI (A CAPO NATURALE E COESO, STILE WISPR FLOW):
-               - NON andare a capo a ogni frase o micro-pensiero! Evita categoricamente i paragrafi composti da una sola riga o da 10-25 parole.
-               - Raggruppa le frasi in blocchi tematici completi e corposi (indicativamente 35-70 parole per paragrafo, con 2-4 frasi collegate).
-               - Vai a capo (\n\n) SOLO quando c'è un reale cambio di argomento o una svolta logica nel discorso, non a ogni respiro o pausa.
-               - Frasi brevi, battute o considerazioni conclusive ("Vediamo come va", "Boh onestamente...", "Qua non lo so") devono rimanere UNITE al paragrafo logico precedente, mai isolate da sole.
-            2. VIRGOLETTE CAPORALI E CITAZIONI:
-               - Usa SEMPRE le virgolette caporali «...» (o le virgolette alte "...") per nomi di applicazioni, software, progetti o citazioni dirette (es. «OpenFlow», «Wispr Flow»).
-            3. PUNTEGGIATURA E RITMO FLUIDO:
-               - Spezza le frasi lunghe tipiche del parlato usando punti fermi (.). Evita l'accumulo sconsiderato di virgole (comma-splicing).
-               - Usa i due punti (:) prima di elenchi o spiegazioni, trattini lunghi (—) per incisi, e virgole per il ritmo naturale.
-            4. ELIMINAZIONE CHIRURGICA DEI RIEMPITIVI (INTERCALARI ED ESITAZIONI):
-               - Cancella rigorosamente tutti gli intercalari orali: "praticamente", "diciamo", "diciamo che", "nel senso", "e via discorrendo", "e quant'altro", "cioè", "tipo", "insomma".
-               - NON iniziare MAI frasi con "E praticamente", "E poi", "E quindi", o "E" come congiunzione iniziale pleonastica. Inizia la frase direttamente con il soggetto o verbo.
-               - Preserva l'espressività e il colore naturale del parlante (es. "Boh", "onestamente parlando", esclamazioni e battute spontanee).
-            5. BALBETTII E PAROLE RIPETUTE:
-               - Se una parola è ripetuta due volte ("sto sto", "prova prova"), mantienila una sola volta.
-            6. MAIUSCOLE E BRAND TECNOLOGICI:
-               - Maiuscola obbligatoria dopo ogni punto (. ! ?).
-               - Scrivi con ortografia corretta tutti i brand e modelli hardware:
-                 • "Groq" (MAI "Grok" quando riferito all'engine/chip LPU)
-                 • "OpenAI" (tutto unito, MAI "Open AI")
-                 • "Gemini", "Flash-Lite" (MAI "Flash Light")
-                 • "Antigravity", "OpenFlow", "Wispr Flow"
-                 • Specifiche hardware e componenti (es. 5600X, 5700X, 5800X3D, 500 W)
-                 • "WhatsApp", "Telegram", "Google", "Android"
-            7. FEDELTÀ ASSOLUTA:
-               - Mantieni inalterato ogni dato, informazione, nome e significato.
-            8. OUTPUT PURO:
-               - Restituisci ESCLUSIVAMENTE il testo finale elaborato, senza prefazioni o commenti.
-
-            ESEMPI GUIDA:
-
-            Input:
-            "allora michele sto creando un'applicazione con l'antigravity che si chiama openflow che è la copia carbone di whisperflow praticamente questa applicazione grazie al tastino allo schermo che tu premi quando devi mandare il messaggio trascrive un messaggio a voce che tu dici e te lo trascrive in modo ottimale impostandotelo bene aggiungendo punteggiatura spazi capitoli andando a capo e praticamente utilizza gli engine di groq gemini openai qualora tu avessi voglia di usare openai a pagamento perché devi farti una ricarica anche di cinque dollari e praticamente ha molti modi di interagire tra cui quello per i prompt per le ai quindi tu selezioni quello e lui ti trascrive in modo ottimale la roba per i prompt e attualmente sto provando gemini con 3.8 3.5 3.5 flash light in modo da vedere quanto è veloce nella trascrizione utilizzando quell'engine perché groq ci ha messo tipo una mangiata di secondi massimo qua non lo so"
-            Output:
-            Allora Michele, sto creando un'applicazione con Antigravity: si chiama «OpenFlow» ed è la copia carbone di Wispr Flow. Grazie al pulsante a comparsa sullo schermo, trascrive il messaggio vocale in modo ottimale: inserisce la punteggiatura corretta, gestisce gli spazi e va a capo automaticamente.
-
-            Supporta diversi engine di intelligenza artificiale: Groq, Gemini e OpenAI (quest'ultimo a pagamento con una ricarica minima di 5 dollari che dura a lungo). Offre anche diverse modalità di interazione, tra cui quella ottimizzata per i prompt di intelligenza artificiale.
-
-            Attualmente sto provando Gemini nelle versioni 3.8, 3.5 e 3.5 Flash-Lite per valutarne la velocità rispetto a Groq, che ha impiegato solo un paio di secondi. Vediamo come si comporta!
-
-            Input:
-            "tu considera che io volevo comprare qualcosina per il computer fare qualche piccolo upgrade e anche cambiare solo il processore da un 5600x a un 5700x o un 5800x3d perché alla fine la scheda madre ce l'ho che spinge l'alimentatore tecnicamente è ottimo perché sono 500 watt ma è comunque un gold anche se ha 3 anni 4 anni di vita ma conta un cazzo boh onestamente parlando se io guardo al mio utilizzo e lo utilizzo veramente poco il computer considerando che ce l'ho sotto la televisione e non lo accendo da un po' cioè nemmeno ci gioco dovrei o vorrei o puntavo a cambiare scheda video ma per giocare a cosa se non gioca un cazzo"
-            Output:
-            Tu considera che io volevo comprare qualcosina per il computer, fare qualche piccolo upgrade e anche cambiare solo il processore da un 5600X a un 5700X o un 5800X3D.
-
-            Perché alla fine la scheda madre ce l'ho, che spinge l'alimentatore. Tecnicamente è ottimo perché sono 500 W, ma è comunque un gold anche se ha 3 anni, 4 anni di vita, ma conta un cazzo.
-
-            Boh onestamente parlando, se io guardo al mio utilizzo e lo utilizzo veramente poco, il computer, considerando che ce l'ho sotto la televisione e non lo accendo da un po', cioè nemmeno ci gioco: dovrei, o vorrei, o puntavo a cambiare scheda video. Ma per giocare a cosa, se non gioca un cazzo?
+            REGOLE FONDAMENTALI:
+            1. TONO AUTENTICO E SPONTANEO (NON SCRIVERE COME UN LIBRO O UN SAGGIO):
+               - Mantieni rigorosamente il tono, il vocabolario e lo stile colloquiale originale di chi parla. Non usare parole auliche o burocratiche.
+               - NON usare MAI le virgolette caporali «...». Usa normali virgolette doppie "..." solo per citazioni o discorsi diretti effettivi.
+               - NON forzare elenchi, schemi, due punti (:) o trattini lunghi (—) se il messaggio è informale o discorsivo.
+            2. PULIZIA NATURALE DEL PARLATO:
+               - Rimuovi balbettii e parole ripetute ("sto sto", "prova prova").
+               - Elimina le esitazioni orali pure ("ehm", "uhm", "cioè diciamo").
+               - Mantieni le espressioni vive e colorite del parlato ("Boh", "onestamente", "dai", "figo", "tranquillo").
+            3. STRUTTURA FRESCA E DINAMICA:
+               - Se il messaggio è una battuta o una risposta breve ("Ok perfetto, ci vediamo dopo!"), lasciala breve e diretta. Non allungare il testo e non creare paragrafi forzati.
+               - Vai a capo (\n\n) solo se il discorso è lungo e affronta argomenti distinti.
+            4. ORTOGRAFIA, PUNTEGGIATURA E BRAND:
+               - Inserisci virgole, punti fermi, punti interrogativi ed esclamativi con ritmo naturale.
+               - Maiuscole dopo il punto e per i brand tecnologici (WhatsApp, Telegram, Groq, Gemini, OpenFlow, Google, ecc.).
+            5. RISPETTO ASSOLUTO DEL SIGNIFICATO:
+               - Non riassumere, non omettere informazioni e non aggiungere commenti dell'AI.
+            6. OUTPUT PURO:
+               - Restituisci ESCLUSIVAMENTE il testo finale pulito, senza preamboli, senza saluti e senza virgolette all'inizio/fine.
         """.trimIndent()
+    ),
+    RAW_WHISPER(
+        title = "Whisper Diretto (Latenza Zero ~200ms)",
+        description = "Trascrizione pura istantanea senza riscrittura IA (massima fedeltà e velocità).",
+        prompt = ""
     ),
     PROFESSIONAL(
         title = "Professionale / Email",
         description = "Registro formale, paragrafi strutturati, ideale per comunicazioni aziendali.",
         prompt = """
-            Sei un editor vocale professionista per comunicazioni aziendali e formali (stile Wispr Pro).
+            Sei un editor vocale professionista per comunicazioni aziendali e formali.
             Trasforma il parlato grezzo in una comunicazione scritta impeccabile, cortese, chiara e ben strutturata.
             
             REGOLE:
@@ -99,10 +73,6 @@ enum class PromptPreset(val title: String, val description: String, val prompt: 
             4. Scrivi numeri, date e valute in formato numerico (es. "1.500 €", "24 ottobre").
             5. Preserva rigorosamente acronimi, codici e nomi propri.
             6. Restituisci ESCLUSIVAMENTE il testo finale pronto per essere inviato, senza prefissi o virgolette.
-
-            ESEMPIO:
-            Input: "buongiorno dottore le volevo dire che ho finito la relazione no anzi la prima bozza della relazione e gliela mando oggi pomeriggio"
-            Output: Buongiorno, Le confermo che ho completato la prima bozza della relazione; provvederò a inviargliela nel corso del pomeriggio.
         """.trimIndent()
     ),
     BULLETS(
@@ -197,6 +167,10 @@ class PreferencesManager(context: Context) {
     var notchOffsetX: Float
         get() = prefs.getFloat(KEY_NOTCH_OFFSET_X, 0f)
         set(value) = prefs.edit().putFloat(KEY_NOTCH_OFFSET_X, value).apply()
+
+    var cachedGeminiModel: String?
+        get() = prefs.getString("cached_gemini_model", null)
+        set(value) = prefs.edit().putString("cached_gemini_model", value).apply()
 
     val currentApiKey: String
         get() = when (activeProvider) {
