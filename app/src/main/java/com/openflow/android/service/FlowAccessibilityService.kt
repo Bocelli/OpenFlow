@@ -13,6 +13,7 @@ import android.os.Looper
 import android.util.Log
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
+import android.view.accessibility.AccessibilityWindowInfo
 import com.openflow.android.ai.AiPipelineClient
 import com.openflow.android.audio.AudioRecorderManager
 import com.openflow.android.data.PreferencesManager
@@ -39,22 +40,25 @@ class FlowAccessibilityService : AccessibilityService() {
     private val hideBubbleRunnable = Runnable {
         if (!prefs.showOnlyWhenFocused || bubbleOverlay?.currentState != BubbleState.IDLE) return@Runnable
 
-        try {
-            val root = rootInActiveWindow
-            val currentPkg = root?.packageName?.toString()?.lowercase() ?: ""
-            root?.recycle()
-
-            val isActuallyLauncher = currentPkg.contains("launcher") || currentPkg.contains("home") || currentPkg.isBlank()
-            if (isActuallyLauncher) {
-                Log.d(TAG, "hideBubble: confermato launcher ($currentPkg), nascondo bolla")
-                bubbleOverlay?.hide()
-            } else {
-                Log.d(TAG, "hideBubble: annullato perché app attiva ($currentPkg), mostro bolla")
-                bubbleOverlay?.show()
-            }
-        } catch (_: Exception) {
-            bubbleOverlay?.hide()
+        // Controllo di sicurezza: se la tastiera è ancora aperta a schermo, non nascondere
+        if (isKeyboardVisible()) {
+            Log.d(TAG, "hideBubble annullato: tastiera ancora visibile a schermo")
+            bubbleOverlay?.show()
+            return@Runnable
         }
+
+        // Se c'è ancora un campo di testo focalizzato, non nascondere
+        val activeInput = findActiveFocusedInput()
+        if (activeInput != null) {
+            Log.d(TAG, "hideBubble annullato: campo ancora focalizzato")
+            updateActiveTarget(activeInput)
+            activeInput.recycle()
+            bubbleOverlay?.show()
+            return@Runnable
+        }
+
+        Log.d(TAG, "hideBubble confermato: nessun input o tastiera attiva")
+        bubbleOverlay?.hide()
     }
 
     override fun onCreate() {
@@ -77,11 +81,12 @@ class FlowAccessibilityService : AccessibilityService() {
                 AccessibilityEvent.TYPE_VIEW_TEXT_SELECTION_CHANGED or
                 AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED or
                 AccessibilityEvent.TYPE_VIEW_TEXT_CHANGED or
-                AccessibilityEvent.TYPE_WINDOWS_CHANGED
+                AccessibilityEvent.TYPE_WINDOWS_CHANGED or
+                AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED
         info.feedbackType = AccessibilityServiceInfo.FEEDBACK_GENERIC
         info.flags = AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS or
                 AccessibilityServiceInfo.FLAG_REPORT_VIEW_IDS
-        info.notificationTimeout = 80
+        info.notificationTimeout = 40
         serviceInfo = info
 
         initBubbleOverlay()
@@ -136,40 +141,44 @@ class FlowAccessibilityService : AccessibilityService() {
         try {
             ensureOverlayInitialized()
 
-            // 1. In modalità persistente (standard Wispr Flow), la bolla deve SEMPRE rimanere visibile a schermo su qualsiasi app
+            // 1. In modalità persistente (standard Wispr Flow), la bolla deve SEMPRE rimanere visibile a schermo
             if (!prefs.showOnlyWhenFocused) {
                 if (bubbleOverlay?.isVisible == false) {
                     bubbleOverlay?.show()
                 }
+                if (source != null && isNodeInputCapable(source, cls, pkg)) {
+                    updateActiveTarget(source)
+                }
+                return
             }
 
-            // 2. Rileva se il nodo corrente può ricevere testo (compatibile con Facebook, BlueMail, YouTube, WhatsApp, Telegram, Chrome, ecc.)
-            val isIme = pkg.contains("inputmethod") || pkg.contains("keyboard") || pkg.contains(".ime")
-            val canAcceptText = (source?.isEditable == true) ||
-                    cls.contains("EditText", ignoreCase = true) ||
-                    cls.contains("TextField", ignoreCase = true) ||
-                    cls.contains("AutoComplete", ignoreCase = true) ||
-                    cls.contains("Input", ignoreCase = true) ||
-                    cls.contains("Search", ignoreCase = true) ||
-                    cls.contains("WebView", ignoreCase = true) ||
-                    cls.contains("Editor", ignoreCase = true) ||
-                    cls.contains("Compose", ignoreCase = true) ||
-                    (source?.actionList?.any { it.id == AccessibilityNodeInfo.ACTION_SET_TEXT || it.id == AccessibilityNodeInfo.ACTION_PASTE } == true)
+            // 2. Modalità "Mostra solo su campi di testo":
+            val keyboardOpen = isKeyboardVisible()
+            val eventIsInput = isNodeInputCapable(source, cls, pkg)
 
-            if (canAcceptText && source != null) {
+            if (eventIsInput && source != null) {
                 updateActiveTarget(source)
             }
 
-            // 3. Gestione Auto-Hide se l'utente ha esplicitamente attivato "Mostra solo su campi di testo"
-            if (prefs.showOnlyWhenFocused) {
-                if (isIme || canAcceptText) {
-                    mainHandler.removeCallbacks(hideBubbleRunnable)
+            if (keyboardOpen || eventIsInput) {
+                mainHandler.removeCallbacks(hideBubbleRunnable)
+                if (bubbleOverlay?.isVisible == false) {
+                    Log.d(TAG, "Input/Tastiera rilevata (kb=$keyboardOpen, input=$eventIsInput): mostro bolla")
                     bubbleOverlay?.show()
-                } else if (event.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
-                    val isLauncherPkg = pkg.contains("launcher") || pkg.contains("home")
-                    if (isLauncherPkg) {
-                        scheduleHideBubbleIfIdle(delayMs = 500)
+                }
+            } else {
+                // Verifica globale per catturare campi non standard (es. YouTube, Facebook, BlueMail)
+                val activeInput = findActiveFocusedInput()
+                if (activeInput != null) {
+                    updateActiveTarget(activeInput)
+                    activeInput.recycle()
+                    mainHandler.removeCallbacks(hideBubbleRunnable)
+                    if (bubbleOverlay?.isVisible == false) {
+                        Log.d(TAG, "Focus globale attivo trovato: mostro bolla")
+                        bubbleOverlay?.show()
                     }
+                } else {
+                    scheduleHideBubbleIfIdle(delayMs = 700)
                 }
             }
         } finally {
@@ -177,10 +186,81 @@ class FlowAccessibilityService : AccessibilityService() {
         }
     }
 
-    private fun scheduleHideBubbleIfIdle(delayMs: Long = 500) {
+    private fun scheduleHideBubbleIfIdle(delayMs: Long = 700) {
         if (!prefs.showOnlyWhenFocused) return
         mainHandler.removeCallbacks(hideBubbleRunnable)
         mainHandler.postDelayed(hideBubbleRunnable, delayMs)
+    }
+
+    /**
+     * Rileva se la finestra della tastiera software (IME) è presente e aperta a schermo.
+     * Metodo a prova di bomba valido su qualsiasi versione Android e OEM (Xiaomi, Samsung, Pixel).
+     */
+    private fun isKeyboardVisible(): Boolean {
+        return try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                windows.any { it.type == AccessibilityWindowInfo.TYPE_INPUT_METHOD }
+            } else {
+                false
+            }
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    /**
+     * Rileva se un nodo o una classe rappresenta un campo di testo o un input interattivo.
+     * Compatibile con Facebook (Litho/React), BlueMail (WebViews), YouTube, WhatsApp, Telegram, ecc.
+     */
+    private fun isNodeInputCapable(source: AccessibilityNodeInfo?, cls: String, pkg: String): Boolean {
+        if (pkg.contains("inputmethod") || pkg.contains("keyboard") || pkg.contains(".ime")) {
+            return true
+        }
+        if (source == null) return false
+
+        if (source.isEditable) return true
+
+        if (cls.contains("EditText", ignoreCase = true) ||
+            cls.contains("TextField", ignoreCase = true) ||
+            cls.contains("AutoComplete", ignoreCase = true) ||
+            cls.contains("Search", ignoreCase = true) ||
+            cls.contains("Input", ignoreCase = true) ||
+            cls.contains("Compose", ignoreCase = true) ||
+            cls.contains("Editor", ignoreCase = true) ||
+            cls.contains("WebView", ignoreCase = true)
+        ) {
+            return true
+        }
+
+        try {
+            val actions = source.actionList
+            if (actions.any { it.id == AccessibilityNodeInfo.ACTION_SET_TEXT || it.id == AccessibilityNodeInfo.ACTION_PASTE }) {
+                return true
+            }
+        } catch (_: Exception) {}
+
+        return false
+    }
+
+    /**
+     * Cerca un campo con focus di input attivo su tutte le finestre visibili a schermo.
+     */
+    private fun findActiveFocusedInput(): AccessibilityNodeInfo? {
+        try {
+            val globalFocus = findFocus(AccessibilityNodeInfo.FOCUS_INPUT)
+            if (globalFocus != null) return globalFocus
+        } catch (_: Exception) {}
+
+        try {
+            val root = rootInActiveWindow
+            if (root != null) {
+                val input = root.findFocus(AccessibilityNodeInfo.FOCUS_INPUT)
+                root.recycle()
+                if (input != null) return input
+            }
+        } catch (_: Exception) {}
+
+        return null
     }
 
     private fun updateActiveTarget(node: AccessibilityNodeInfo) {
