@@ -82,12 +82,7 @@ class AiPipelineClient(private val prefs: PreferencesManager) {
             multipartBuilder.addFormDataPart("language", lang)
         }
 
-        // Prompt priming: insegna a Whisper a preservare le lettere singole (A B C) e i termini tecnici
-        multipartBuilder.addFormDataPart(
-            "prompt",
-            "Trascrizione vocale accurata. Lettere scandite: A B C, D E F. Termini tecnici: broadcast, link, email."
-        )
-
+        // Nessun parametro "prompt" iniettato: evita che Whisper allucini parole dal prompt (es. "broadcast")
         val request = Request.Builder()
             .url("${provider.baseUrl}/audio/transcriptions")
             .addHeader("Authorization", "Bearer $apiKey")
@@ -171,6 +166,7 @@ class AiPipelineClient(private val prefs: PreferencesManager) {
     private fun sanitizeLlmOutput(output: String): String {
         var clean = output.trim()
         val prefixesToRemove = listOf(
+            "Broadcast:", "Broadcast :", "Broadcast",
             "Message:", "Message :", "Messaggio:", "Messaggio :",
             "Testo:", "Testo :", "Trascrizione:", "Output:"
         )
@@ -187,6 +183,6 @@ class AiPipelineClient(private val prefs: PreferencesManager) {
         // Correzione fonetica specifica per lo spelling delle lettere ("abici" / "a bici" -> "A B C")
         clean = clean.replace(Regex("""\b(abici|abbiccì|a\s+bici)\b""", RegexOption.IGNORE_CASE), "A B C")
 
-        return clean
+        return clean.trim()
     }
 }
