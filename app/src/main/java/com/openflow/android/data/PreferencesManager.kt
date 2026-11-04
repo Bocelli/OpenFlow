@@ -10,13 +10,13 @@ enum class ApiProvider(val displayName: String, val baseUrl: String, val asrMode
         displayName = "Groq (Free LPU ~200ms)",
         baseUrl = "https://api.groq.com/openai/v1",
         asrModel = "whisper-large-v3-turbo",
-        llmModel = "openai/gpt-oss-120b"
+        llmModel = "openai/gpt-oss-20b"
     ),
     GEMINI(
         displayName = "Google Gemini (Free AI Studio)",
         baseUrl = "https://generativelanguage.googleapis.com/v1beta",
         asrModel = "multimodal",
-        llmModel = "gemini-2.5-flash"
+        llmModel = "gemini-3.8-flash"
     ),
     OPENAI(
         displayName = "OpenAI (Wispr Flow Nativo)",

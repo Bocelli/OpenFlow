@@ -92,6 +92,9 @@ class AiPipelineClient(private val prefs: PreferencesManager) {
         Result.success(finalOutput)
     }
 
+    private var cachedGeminiModel: String? = null
+    private var cachedGroqModel: String? = null
+
     private fun processGeminiMultimodalAudio(audioFile: File, apiKey: String): Result<String> {
         val audioBytes = try {
             audioFile.readBytes()
@@ -100,10 +103,32 @@ class AiPipelineClient(private val prefs: PreferencesManager) {
         }
 
         val base64Audio = android.util.Base64.encodeToString(audioBytes, android.util.Base64.NO_WRAP)
-        val candidateModels = listOf("gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash")
+        
+        // 1. Costruiamo la lista candidati: cache -> scoperta dinamica ListModels -> modelli 2026
+        val candidateModels = mutableListOf<String>()
+        cachedGeminiModel?.let { candidateModels.add(it) }
+
+        val discovered = discoverActiveGeminiModel(apiKey)
+        if (discovered != null && !candidateModels.contains(discovered)) {
+            candidateModels.add(discovered)
+        }
+
+        val defaultFallbacks = listOf(
+            "gemini-3.8-flash",
+            "gemini-3.5-flash",
+            "gemini-3.5-flash-lite",
+            "gemini-2.5-flash",
+            "gemini-2.0-flash"
+        )
+        for (f in defaultFallbacks) {
+            if (!candidateModels.contains(f) && !candidateModels.contains("models/$f")) {
+                candidateModels.add(f)
+            }
+        }
 
         var lastError: Exception? = null
         for (modelName in candidateModels) {
+            val path = if (modelName.startsWith("models/")) modelName else "models/$modelName"
             val payload = JSONObject().apply {
                 put("system_instruction", JSONObject().apply {
                     put("parts", JSONArray().apply {
@@ -134,11 +159,12 @@ class AiPipelineClient(private val prefs: PreferencesManager) {
 
             val jsonMediaType = "application/json; charset=utf-8".toMediaType()
             val request = Request.Builder()
-                .url("https://generativelanguage.googleapis.com/v1beta/models/$modelName:generateContent?key=${apiKey.trim()}")
+                .url("https://generativelanguage.googleapis.com/v1beta/$path:generateContent?key=${apiKey.trim()}")
                 .post(payload.toString().toRequestBody(jsonMediaType))
                 .build()
 
             try {
+                Log.d(TAG, "Tentativo chiamata Gemini con modello: $path")
                 val response = httpClient.newCall(request).execute()
                 val responseBody = response.body?.string() ?: ""
                 if (response.isSuccessful) {
@@ -150,6 +176,7 @@ class AiPipelineClient(private val prefs: PreferencesManager) {
                         if (parts != null && parts.length() > 0) {
                             val text = parts.getJSONObject(0).optString("text", "").trim()
                             if (text.isNotBlank()) {
+                                cachedGeminiModel = modelName
                                 return Result.success(text)
                             }
                         }
@@ -157,7 +184,8 @@ class AiPipelineClient(private val prefs: PreferencesManager) {
                     return Result.failure(IOException("Risposta Gemini priva di testo generato."))
                 } else {
                     lastError = IOException("Gemini ($modelName) HTTP ${response.code}: $responseBody")
-                    // Se è 404, proseguiamo al modello successivo
+                    // Se è 404, invalidiamo la cache e proseguiamo al modello successivo
+                    if (cachedGeminiModel == modelName) cachedGeminiModel = null
                     if (response.code != 404) {
                         return Result.failure(lastError)
                     }
@@ -168,6 +196,56 @@ class AiPipelineClient(private val prefs: PreferencesManager) {
         }
 
         return Result.failure(lastError ?: IOException("Tutti i modelli Gemini hanno fallito"))
+    }
+
+    private fun discoverActiveGeminiModel(apiKey: String): String? {
+        val cleanKey = apiKey.trim()
+        val url = "https://generativelanguage.googleapis.com/v1beta/models?key=$cleanKey&pageSize=100"
+        return try {
+            val request = Request.Builder().url(url).get().build()
+            val response = httpClient.newCall(request).execute()
+            val body = response.body?.string() ?: ""
+            if (!response.isSuccessful) {
+                Log.e(TAG, "ListModels Gemini fallito HTTP ${response.code}: $body")
+                return null
+            }
+
+            val json = JSONObject(body)
+            val modelsArray = json.optJSONArray("models") ?: return null
+            val candidates = mutableListOf<String>()
+
+            for (i in 0 until modelsArray.length()) {
+                val modelObj = modelsArray.getJSONObject(i)
+                val name = modelObj.optString("name", "") // es: "models/gemini-3.8-flash"
+                val methods = modelObj.optJSONArray("supportedGenerationMethods")
+                var supportsGenerateContent = false
+                if (methods != null) {
+                    for (j in 0 until methods.length()) {
+                        if (methods.getString(j) == "generateContent") {
+                            supportsGenerateContent = true
+                            break
+                        }
+                    }
+                }
+                if (supportsGenerateContent && name.isNotBlank()) {
+                    candidates.add(name)
+                }
+            }
+
+            Log.i(TAG, "Modelli Gemini disponibili per la chiave: $candidates")
+
+            // Preferiamo i modelli Flash più veloci e moderni
+            val chosen = candidates.firstOrNull { it.contains("3.8-flash", ignoreCase = true) }
+                ?: candidates.firstOrNull { it.contains("3.5-flash", ignoreCase = true) }
+                ?: candidates.firstOrNull { it.contains("flash", ignoreCase = true) }
+                ?: candidates.firstOrNull { it.contains("gemini", ignoreCase = true) }
+                ?: candidates.firstOrNull()
+
+            chosen
+        } catch (e: Exception) {
+            Log.e(TAG, "Eccezione durante ListModels Gemini: ${e.message}", e)
+            null
+        }
     }
 
     private fun transcribeAudio(
@@ -231,8 +309,8 @@ class AiPipelineClient(private val prefs: PreferencesManager) {
         // 2. Per Groq: fallback su modelli attivi della nuova generazione
         if (provider == com.openflow.android.data.ApiProvider.GROQ) {
             val fallbackCandidates = listOf(
-                "openai/gpt-oss-120b",
                 "openai/gpt-oss-20b",
+                "openai/gpt-oss-120b",
                 "qwen/qwen3.8-27b"
             )
             for (candidate in fallbackCandidates) {
@@ -241,6 +319,7 @@ class AiPipelineClient(private val prefs: PreferencesManager) {
                     val res = executeLlmCall(rawText, cleanKey, cleanBaseUrl, candidate)
                     if (res.isSuccess) {
                         Log.i(TAG, "Fallback Groq riuscito con $candidate!")
+                        cachedGroqModel = candidate
                         return res
                     }
                 }
