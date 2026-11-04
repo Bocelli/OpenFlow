@@ -73,4 +73,15 @@ class PromptPresetTest {
         val outputMessage = AiPipelineClient.sanitizeAndFormatText(inputMessage)
         assertEquals("Ciao Michele", outputMessage)
     }
+
+    @Test
+    fun testSanitizerFixesBrandsAndRemovesOralStarters() {
+        val input = "Praticamente sto provando con grok e open ai e flash light con antigravity."
+        val output = AiPipelineClient.sanitizeAndFormatText(input)
+        assertEquals("Sto provando con Groq e OpenAI e Flash-Lite con Antigravity.", output)
+
+        val inputConjunction = "Primo periodo. E praticamente questa applicazione funziona benissimo."
+        val outputConjunction = AiPipelineClient.sanitizeAndFormatText(inputConjunction)
+        assertEquals("Primo periodo. Questa applicazione funziona benissimo.", outputConjunction)
+    }
 }

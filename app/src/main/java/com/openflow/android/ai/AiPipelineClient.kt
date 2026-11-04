@@ -142,7 +142,7 @@ class AiPipelineClient(private val prefs: PreferencesManager) {
                         put("role", "user")
                         put("parts", JSONArray().apply {
                             put(JSONObject().apply {
-                                put("text", "Trascrivi e formatta il parlato di questo file audio secondo le istruzioni del sistema (virgolette caporali per citazioni o app, paragrafi con a capo, punteggiatura d'autore e rimozione totale degli intercalari). Restituisci ESCLUSIVAMENTE il testo elaborato.")
+                                put("text", "Trascrivi e formatta il parlato contenuto in questa registrazione secondo le istruzioni del sistema: dividi in paragrafi ariosi (\\n\\n), usa le virgolette caporali «...» per i nomi di progetti o app, sistema la punteggiatura spezzando le frasi lunghe, ed elimina rigorosamente tutti gli intercalari ed esitazioni orali (es. 'praticamente', 'e praticamente', 'diciamo'). Scrivi correttamente i brand (Groq, OpenAI, Gemini, Flash-Lite, Antigravity, OpenFlow). Restituisci ESCLUSIVAMENTE il testo finale elaborato pronto da inviare.")
                             })
                             put(JSONObject().apply {
                                 put("inline_data", JSONObject().apply {
@@ -480,10 +480,22 @@ class AiPipelineClient(private val prefs: PreferencesManager) {
                 clean = clean.substring(1, clean.length - 1).trim()
             }
 
-            // 4. Correzione fonetica per lo spelling ("abici" / "a bici" -> "A B C")
+            // 4. Correzione fonetica e normalizzazione brand tecnologici
             clean = clean.replace(Regex("""\b(abici|abbiccì|a\s+bici)\b""", RegexOption.IGNORE_CASE), "A B C")
+            clean = clean.replace(Regex("""\b(grok)\b""", RegexOption.IGNORE_CASE), "Groq")
+            clean = clean.replace(Regex("""\bopen\s+ai\b""", RegexOption.IGNORE_CASE), "OpenAI")
+            clean = clean.replace(Regex("""\bflash\s+light\b""", RegexOption.IGNORE_CASE), "Flash-Lite")
+            clean = clean.replace(Regex("""\b(antigravity|anti\s+gravity)\b""", RegexOption.IGNORE_CASE), "Antigravity")
+            clean = clean.replace(Regex("""\b(wisper\s+flow|whisper\s+flow)\b""", RegexOption.IGNORE_CASE), "Wispr Flow")
+            clean = clean.replace(Regex("""\bopen\s+flow\b""", RegexOption.IGNORE_CASE), "OpenFlow")
 
-            // 5. Deduplicazione automatica parole consecutive (elimina balbettii con pause, virgole o spazi)
+            // 5. Rimozione chirurgica di attacchi orali pleonastici a inizio paragrafo o frase ("E praticamente...", "Praticamente...")
+            clean = clean.replace(Regex("""(?m)^[Ee]\s+praticamente\s*,?\s*"""), "")
+            clean = clean.replace(Regex("""(?m)^[Pp]raticamente\s*,?\s*"""), "")
+            clean = clean.replace(Regex("""([.!?]\s+)[Ee]\s+praticamente\s*,?\s*""")) { match -> match.groupValues[1] }
+            clean = clean.replace(Regex("""([.!?]\s+)[Pp]raticamente\s*,?\s*""")) { match -> match.groupValues[1] }
+
+            // 6. Deduplicazione automatica parole consecutive (elimina balbettii con pause, virgole o spazi)
             // Usa \p{L} per supportare qualsiasi carattere Unicode (inclusi accenti italiani: à è é ì ò ù)
             val duplicateSingleWordRegex = Regex("""\b(\p{L}+)[\s,.;:-]+\1\b""", RegexOption.IGNORE_CASE)
             var singleWordIter = 0
@@ -504,7 +516,7 @@ class AiPipelineClient(private val prefs: PreferencesManager) {
                 twoWordsIter++
             }
 
-            // 6. Normalizzazione spaziature tipografiche
+            // 7. Normalizzazione spaziature tipografiche
             // Elimina spazi prima di virgole, punti, due punti, punti e virgola, interrogativi ed esclamativi
             clean = clean.replace(Regex("""\s+([,.:;!?])"""), "$1")
 

@@ -38,17 +38,23 @@ enum class PromptPreset(val title: String, val description: String, val prompt: 
                - Dividi il testo in paragrafi brevi (massimo 2-3 frasi) separati da un doppio a capo (\n\n).
                - NON lasciare MAI un unico blocco continuo di testo se supera le 25 parole.
             2. VIRGOLETTE CAPORALI E CITAZIONI:
-               - Usa SEMPRE le virgolette caporali «...» (o le virgolette alte "...") per nomi di applicazioni, software, progetti o citazioni dirette (es. «MicFlow», «Wispr Flow»).
-            3. PUNTEGGIATURA E RITMO:
-               - Spezza le frasi lunghe tipiche del parlato usando punti fermi (.).
+               - Usa SEMPRE le virgolette caporali «...» (o le virgolette alte "...") per nomi di applicazioni, software, progetti o citazioni dirette (es. «OpenFlow», «Wispr Flow»).
+            3. PUNTEGGIATURA E RITMO FLUIDO:
+               - Spezza le frasi lunghe tipiche del parlato usando punti fermi (.). Evita l'accumulo sconsiderato di virgole (comma-splicing).
                - Usa i due punti (:) prima di elenchi o spiegazioni, trattini lunghi (—) per incisi, e virgole per il ritmo naturale.
-            4. ELIMINAZIONE CHIRURGICA DEI RIEMPITIVI (INTERCALARI):
+            4. ELIMINAZIONE CHIRURGICA DEI RIEMPITIVI (INTERCALARI ED ESITAZIONI):
                - Cancella rigorosamente tutti gli intercalari orali: "praticamente", "diciamo", "diciamo che", "nel senso", "e via discorrendo", "e quant'altro", "cioè", "tipo", "insomma".
+               - NON iniziare MAI frasi con "E praticamente", "E poi", "E quindi", o "E" come congiunzione iniziale pleonastica. Inizia la frase direttamente con il soggetto o verbo.
             5. BALBETTII E PAROLE RIPETUTE:
                - Se una parola è ripetuta due volte ("sto sto", "prova prova"), mantienila una sola volta.
-            6. MAIUSCOLE E BRAND:
+            6. MAIUSCOLE E BRAND TECNOLOGICI:
                - Maiuscola obbligatoria dopo ogni punto (. ! ?).
-               - Scrivi correttamente tutti i brand (WhatsApp, Telegram, MicFlow, Wispr Flow, Google, Android).
+               - Scrivi con ortografia corretta tutti i brand:
+                 • "Groq" (MAI "Grok" quando riferito all'engine/chip LPU)
+                 • "OpenAI" (tutto unito, MAI "Open AI")
+                 • "Gemini", "Flash-Lite" (MAI "Flash Light")
+                 • "Antigravity", "OpenFlow", "Wispr Flow"
+                 • "WhatsApp", "Telegram", "Google", "Android"
             7. FEDELTÀ ASSOLUTA:
                - Mantieni inalterato ogni dato, informazione, nome e significato.
             8. OUTPUT PURO:
@@ -57,15 +63,17 @@ enum class PromptPreset(val title: String, val description: String, val prompt: 
             ESEMPI GUIDA:
 
             Input:
-            "allora michele praticamente sto creando questa applicazione che si chiama micflow che è praticamente la copia carbone di whisperflow cosa fa lei analizza il testo che tu dici cioè le parole che tu dici premendo il pulsante e le trascrive in modo ottimale quindi aggiungendo punteggiatura aggiungendo spazi andando a capo e via discorrendo quindi creando uno schema perfetto del messaggio pronto ad essere mandato che sia su telegram su whatsapp via mail e via discorrendo ha tante altre funzioni come la predisposizione alla trascrizione dei prompt quella che sto usando io la trascrizione questa racconto così come quella sparata a zero dell'llm che praticamente tutto quello che dici trascrive quindi per me può essere fantastica questa applicazione vediamo come va"
+            "allora michele sto creando un'applicazione con l'antigravity che si chiama openflow che è la copia carbone di whisperflow praticamente questa applicazione grazie al tastino allo schermo che tu premi quando devi mandare il messaggio trascrive un messaggio a voce che tu dici e te lo trascrive in modo ottimale impostandotelo bene aggiungendo punteggiatura spazi capitoli andando a capo e praticamente utilizza gli engine di groq gemini openai qualora tu avessi voglia di usare openai a pagamento perché devi farti una ricarica anche di cinque dollari e praticamente ha molti modi di interagire tra cui quello per i prompt per le ai quindi tu selezioni quello e lui ti trascrive in modo ottimale la roba per i prompt e attualmente sto provando gemini con 3.8 3.5 3.5 flash light in modo da vedere quanto è veloce nella trascrizione utilizzando quell'engine perché groq ci ha messo tipo una mangiata di secondi massimo qua non lo so"
             Output:
-            Allora Michele, sto creando quest'applicazione: si chiama «MicFlow» ed è la copia carbone di Wispr Flow.
+            Allora Michele, sto creando un'applicazione con Antigravity: si chiama «OpenFlow» ed è la copia carbone di Wispr Flow.
 
-            Cosa fa? Analizza le parole che pronunci premendo il pulsante e le trascrive in modo ottimale: inserisce la punteggiatura corretta, gestisce gli spazi e va a capo da sola, creando una struttura perfetta pronta per essere inviata su Telegram, WhatsApp o via email.
+            Grazie al pulsante a comparsa sullo schermo, trascrive il messaggio vocale in modo ottimale: inserisce la punteggiatura corretta, gestisce gli spazi e va a capo automaticamente.
 
-            Ha anche diverse altre funzioni, tra cui la trascrizione ottimizzata per prompt IA, la modalità racconto e la trascrizione pura senza filtri.
+            Supporta diversi engine di intelligenza artificiale: Groq, Gemini e OpenAI (quest'ultimo a pagamento con una ricarica minima di 5 dollari che dura a lungo).
 
-            Secondo me può essere un'applicazione fantastica. Vediamo come va!
+            Offre anche diverse modalità di interazione, tra cui quella ottimizzata per i prompt di intelligenza artificiale.
+
+            Attualmente sto provando Gemini nelle versioni 3.8, 3.5 e 3.5 Flash-Lite per valutarne la velocità rispetto a Groq, che ha impiegato solo un paio di secondi. Vediamo come si comporta!
 
             Input:
             "allora ieri sera parlavo con marco e a un certo punto lui mi fa guarda che il progetto salta se non consegniamo entro lunedì e io gli ho detto ma scherzi abbiamo lavorato giorno e notte e niente mi ha risposto eh lo so ma il cliente ha cambiato idea comunque alla fine abbiamo concordato di sentirci domani mattina verso le nove"
