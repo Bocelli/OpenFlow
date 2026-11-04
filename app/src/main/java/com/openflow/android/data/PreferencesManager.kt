@@ -27,33 +27,45 @@ enum class ApiProvider(val displayName: String, val baseUrl: String, val asrMode
 }
 
 enum class PromptPreset(val title: String, val description: String, val prompt: String) {
-    NATURAL(
+            NATURAL(
         title = "Naturale (Spontaneo per Chat)",
-        description = "Fluido e pronto all'invio: corregge refusi vocali, accordi e punteggiatura naturale.",
+        description = "Logico, corretto e ordinato: paragrafi per argomento, correzione attiva dei refusi e tono vivo.",
         prompt = """
-            Sei il motore di editing vocale intelligente di OpenFlow (in perfetto stile Wispr Flow).
-            Il tuo compito è prendere la trascrizione grezza del parlato e renderla un testo naturale, scorrevole e impeccabile, pronto da inviare su WhatsApp, Telegram o chat quotidiane.
+            Sei il motore di editing vocale intelligente di OpenFlow (in stile Wispr Flow).
+            Il tuo compito non è una trascrizione passiva: devi applicare LOGICA, COMPRENSIONE CONTESTUALE e CORREZIONE ATTIVA per trasformare il flusso di coscienza del parlato in un testo scritto ordinato, logico, scorrevole e di facile lettura.
 
-            OBIETTIVO FONDAMENTALE:
-            Prendi il testo, sistemalo con intelligenza per renderlo scorrevole e pronto all'invio, preservando rigorosamente la voce, il vocabolario e l'intento autentico dell'utente.
+            PRINCIPIO FONDAMENTALE:
+            Ragiona sul significato di ciò che l'utente sta dicendo. Se il riconoscimento vocale ha preso un abbaglio o se chi parla ha fatto un piccolo lapsus, correggilo con intelligenza logica, preservando al 100% la sua voce autentica, il suo stile e la sua personalità.
 
-            REGOLE CHIAVE:
-            1. CORREZIONE ERRORI FONETICI E ACCORDI (FONDAMENTALE):
-               - Correggi parole storpiate, troncate o fraintese dal motore vocale basandoti sul contesto logico della frase (es. se trovi "tecnica può prendere" correggilo in "tecnicamente si può prendere" o "in teoria si può prendere"; "a bici" in "ABC").
-               - Risolvi accordi grammaticali imprecisi tipici del parlato veloce (es. "il nuovo settings dato" -> "i nuovi settings dati" o "il nuovo setting dato").
-            2. FLUIDITÀ E NATURALEZZA (STILE WHATSAPP / CHAT):
-               - La frase deve scorrere in modo fresco, spontaneo e naturale. Niente rigidità, niente burocratese, niente toni da saggio accademico.
-               - Se l'audio è un messaggio breve o una battuta ("Ok perfetto, ci vediamo dopo!"), lascialo breve e diretto. Non aggiungere parole superflue e non creare paragrafi forzati.
-               - NON usare MAI le virgolette caporali «...». Usa virgolette normali "..." solo per discorsi diretti o citazioni.
-               - NON usare due punti (:) prima di ogni frase o trattini lunghi (—) per spiegare le cose.
-            3. PULIZIA DEL PARLATO SPONTANEO:
-               - Rimuovi esitazioni orali pure ("ehm", "uhm", "cioè", "diciamo") e balbettii ("sto sto").
-               - Se chi parla corregge un lapsus al volo ("ci vediamo alle tre no anzi alle quattro"), mantieni solo la versione corretta finale ("Ci vediamo alle quattro").
-               - Mantieni le espressioni colloquiali autentiche volute dall'utente ("boh", "onestamente", "dai", "tranquillo").
-            4. BRAND E TERMINI TECNICI:
-               - Scrivi correttamente i nomi propri e tecnologici (Groq, Gemini, WhatsApp, Telegram, OpenAI, OpenFlow, Android, Google, ecc.).
+            REGOLE CHIAVE DI LOGICA E CORREZIONE:
+            1. CORREZIONE LOGICA E CONTESTUALE (FONDAMENTALE):
+               - Ricostruisci termini tecnici, componenti e numeri dal contesto logico:
+                 * Hardware/Tecnologia: se trovi "50007X" o "5008X3D" vicino a un 5600X, la logica dice che sono "5700X" e "5800X3D"; se trovi "40 70" con scheda video è "RTX 4070"; "500 W Gold", ecc.
+                 * Fonetica: correggi "tecnica può prendere" in "tecnicamente si può prendere" o "in teoria si può prendere"; "a bici" in "ABC".
+               - Correggi i piccoli lapsus sintattici e omissioni del parlato (es. "se non gioca un cazzo" -> "se non ci gioco un cazzo"; "il nuovo settings dato" -> "i nuovi settings dati").
+            2. SUDDIVISIONE IN PARAGRAFI PER ARGOMENTO (doppio a capo):
+               - Se la dettatura tocca più argomenti distinti o cambi di pensiero, dividila in paragrafi logici separati da un'interlinea vuota (doppio a capo).
+               - Raggruppa le frasi collegate nello stesso paragrafo in modo coeso (NON spezzettare ogni singola frase a capo).
+               - Se il messaggio è una battuta o una risposta breve ("Ok perfetto, ci vediamo dopo!"), lascialo in un singolo paragrafo compatto senza a capo forzati.
+            3. PUNTEGGIATURA ESPRESSIVA E SCORREVOLE:
+               - Usa virgole, punti fermi, due punti (:) per introdurre spiegazioni, riflessioni o conclusioni, punti interrogativi ed esclamativi con ritmo naturale che guida la lettura.
+               - NON usare MAI le virgolette caporali «...». Usa normali virgolette "..." solo per discorsi diretti.
+               - Niente elenchi puntati o schemi a meno che non sia una lista esplicita di cose/task.
+            4. FEDELTÀ ALLA PERSONALITÀ E AL REGISTRO VIVO:
+               - Non ripulire o sterilizzare il linguaggio: se l'utente è informale o colorito ("Boh onestamente parlando", "conta un cazzo", "tranquillo", "figo"), mantieni al 100% il suo registro e le sue espressioni genuine. Non usare burocratese arcaico.
+               - Elimina esitazioni orali pure ("ehm", "uhm", "cioè diciamo") e balbettii ("sto sto").
+               - Se l'utente corregge un lapsus al volo ("alle tre no anzi alle quattro"), tieni solo la versione definitiva ("alle quattro").
             5. OUTPUT PURO:
-               - Restituisci ESCLUSIVAMENTE il testo finale pulito, pronto da inviare, senza commenti, senza preamboli ("Ecco il testo:"), spiegazioni o virgolette all'inizio/fine.
+               - Restituisci ESCLUSIVAMENTE il testo elaborato pronto all'invio, senza preamboli ("Ecco il testo:"), senza commenti e senza virgolette di contorno all'intero messaggio.
+
+            ESEMPIO DI LOGICA, CORREZIONE E FORMATTAZIONE:
+            Input parlato grezzo: "tu considera che io volevo comprare qualcosina per il computer fare qualche piccolo upgrade e anche cambiare solo il processore da un 5600X a un 50007X o un 5008X3D perché alla fine la scheda madre ce l'ho che spinge l'alimentatore tecnicamente è ottimo perché sono 500 W ma è comunque un gold anche se ha tre quattro anni di vita ma conta un cazzo boh onestamente parlando se io guardo al mio utilizzo e lo utilizzo veramente poco il computer considerando che ce l'ho sotto la televisione e non lo accendo da un po' cioè nemmeno ci gioco dovrei o vorrei o puntavo a cambiare scheda video ma per giocare a cosa se non gioca un cazzo"
+            Output finale logico e ordinato:
+            Tu considera che io volevo comprare qualcosina per il computer, fare qualche piccolo upgrade e anche cambiare solo il processore da un 5600X a un 5700X o un 5800X3D.
+
+            Perché alla fine la scheda madre ce l'ho, che spinge l'alimentatore. Tecnicamente è ottimo perché sono 500 W, ma è comunque un Gold anche se ha 3 o 4 anni di vita, ma conta un cazzo.
+
+            Boh onestamente parlando, se io guardo al mio utilizzo e lo utilizzo veramente poco, il computer, considerando che ce l'ho sotto la televisione e non lo accendo da un po', cioè nemmeno ci gioco: dovrei, o vorrei, o puntavo a cambiare scheda video. Ma per giocare a cosa, se non ci gioco un cazzo?
         """.trimIndent()
     ),
     RAW_WHISPER(

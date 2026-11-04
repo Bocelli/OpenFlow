@@ -136,7 +136,7 @@ class AiPipelineClient(private val prefs: PreferencesManager) {
                         put("role", "user")
                         put("parts", JSONArray().apply {
                             put(JSONObject().apply {
-                                put("text", "Trascrivi e formatta il parlato contenuto in questa registrazione secondo le istruzioni del sistema: rendi il testo naturale, scorrevole e pronto da inviare in chat. Correggi errori fonetici del parlato e accordi grammaticali, elimina esitazioni e balbettii, usa punteggiatura naturale (NON usare MAI virgolette caporali «...») e rispetta il tono spontaneo dell'utente. Restituisci ESCLUSIVAMENTE il testo finale pulito pronto da inviare.")
+                                put("text", "Trascrivi e formatta il parlato contenuto in questa registrazione secondo le istruzioni del sistema: applica logica e correzione attiva (correggi refusi fonetici, modelli hardware come CPU/GPU, e lapsus sintattici). Suddividi il testo per argomenti in paragrafi logici separati da riga vuota, mantieni la voce viva dell'utente con punteggiatura espressiva, e NON usare MAI virgolette caporali «...». Restituisci ESCLUSIVAMENTE il testo finale pulito pronto da inviare.")
                             })
                             put(JSONObject().apply {
                                 put("inline_data", JSONObject().apply {
