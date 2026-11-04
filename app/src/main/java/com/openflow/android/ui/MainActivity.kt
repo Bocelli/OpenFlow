@@ -106,6 +106,7 @@ fun MainSettingsScreen(prefs: PreferencesManager, resumeTrigger: Int = 0) {
     var activeProvider by remember { mutableStateOf(prefs.activeProvider) }
     var openAiKey by remember { mutableStateOf(prefs.openAiKey) }
     var groqKey by remember { mutableStateOf(prefs.groqKey) }
+    var geminiKey by remember { mutableStateOf(prefs.geminiKey) }
     var selectedLanguage by remember { mutableStateOf(prefs.language) }
     var activePreset by remember { mutableStateOf(prefs.activePreset) }
     var showOnlyWhenFocused by remember { mutableStateOf(prefs.showOnlyWhenFocused) }
@@ -281,10 +282,10 @@ fun MainSettingsScreen(prefs: PreferencesManager, resumeTrigger: Int = 0) {
                     border = CardDefaults.outlinedCardBorder().copy(brush = Brush.verticalGradient(listOf(FlowBorder, FlowSurfaceElevated)))
                 ) {
                     Column(modifier = Modifier.padding(16.dp)) {
-                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             ProviderTab(
-                                title = "Groq (Consigliato)",
-                                subtitle = "Latenza ~200ms • Free",
+                                title = "Groq",
+                                subtitle = "Free LPU",
                                 isSelected = activeProvider == ApiProvider.GROQ,
                                 modifier = Modifier.weight(1f),
                                 onClick = {
@@ -293,8 +294,18 @@ fun MainSettingsScreen(prefs: PreferencesManager, resumeTrigger: Int = 0) {
                                 }
                             )
                             ProviderTab(
+                                title = "Gemini",
+                                subtitle = "Free Google",
+                                isSelected = activeProvider == ApiProvider.GEMINI,
+                                modifier = Modifier.weight(1f),
+                                onClick = {
+                                    activeProvider = ApiProvider.GEMINI
+                                    prefs.activeProvider = ApiProvider.GEMINI
+                                }
+                            )
+                            ProviderTab(
                                 title = "OpenAI",
-                                subtitle = "Whisper Originale",
+                                subtitle = "Wispr Pro",
                                 isSelected = activeProvider == ApiProvider.OPENAI,
                                 modifier = Modifier.weight(1f),
                                 onClick = {
@@ -306,20 +317,39 @@ fun MainSettingsScreen(prefs: PreferencesManager, resumeTrigger: Int = 0) {
 
                         Spacer(modifier = Modifier.height(16.dp))
 
-                        val currentKey = if (activeProvider == ApiProvider.GROQ) groqKey else openAiKey
+                        val currentKey = when (activeProvider) {
+                            ApiProvider.GROQ -> groqKey
+                            ApiProvider.GEMINI -> geminiKey
+                            ApiProvider.OPENAI -> openAiKey
+                        }
                         OutlinedTextField(
                             value = currentKey,
                             onValueChange = { newValue ->
-                                if (activeProvider == ApiProvider.GROQ) {
-                                    groqKey = newValue
-                                    prefs.groqKey = newValue
-                                } else {
-                                    openAiKey = newValue
-                                    prefs.openAiKey = newValue
+                                when (activeProvider) {
+                                    ApiProvider.GROQ -> {
+                                        groqKey = newValue
+                                        prefs.groqKey = newValue
+                                    }
+                                    ApiProvider.GEMINI -> {
+                                        geminiKey = newValue
+                                        prefs.geminiKey = newValue
+                                    }
+                                    ApiProvider.OPENAI -> {
+                                        openAiKey = newValue
+                                        prefs.openAiKey = newValue
+                                    }
                                 }
                             },
                             label = { Text("Chiave API ${activeProvider.displayName}") },
-                            placeholder = { Text(if (activeProvider == ApiProvider.GROQ) "gsk_..." else "sk-...") },
+                            placeholder = {
+                                Text(
+                                    when (activeProvider) {
+                                        ApiProvider.GROQ -> "gsk_..."
+                                        ApiProvider.GEMINI -> "AIzaSy..."
+                                        ApiProvider.OPENAI -> "sk-..."
+                                    }
+                                )
+                            },
                             modifier = Modifier.fillMaxWidth(),
                             singleLine = true,
                             visualTransformation = if (isKeyVisible) VisualTransformation.None else PasswordVisualTransformation(),
@@ -340,6 +370,14 @@ fun MainSettingsScreen(prefs: PreferencesManager, resumeTrigger: Int = 0) {
                             ),
                             shape = RoundedCornerShape(12.dp)
                         )
+
+                        Spacer(modifier = Modifier.height(6.dp))
+                        val hint = when (activeProvider) {
+                            ApiProvider.GROQ -> "⚡ 100% Gratis (console.groq.com) • LPU Ultra-Veloce con auto-discovery"
+                            ApiProvider.GEMINI -> "🌟 100% Gratis (aistudio.google.com) • Trascrizione multimodale God-Tier"
+                            ApiProvider.OPENAI -> "👑 Motore identico a Wispr Flow (platform.openai.com) • ~0.003$ per vocale"
+                        }
+                        Text(text = hint, fontSize = 11.sp, color = FlowEmerald, fontWeight = FontWeight.Medium)
 
                         Spacer(modifier = Modifier.height(14.dp))
                         Text(

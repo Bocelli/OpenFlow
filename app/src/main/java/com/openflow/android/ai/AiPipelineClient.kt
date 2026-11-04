@@ -42,6 +42,26 @@ class AiPipelineClient(private val prefs: PreferencesManager) {
 
         val provider = prefs.activeProvider
 
+        // CASO SPECIALE: GOOGLE GEMINI (Multimodale diretto Audio -> Testo formattato)
+        if (provider == com.openflow.android.data.ApiProvider.GEMINI) {
+            Log.d(TAG, "Elaborazione audio multimodale nativa con Google Gemini...")
+            val geminiResult = processGeminiMultimodalAudio(audioFile, apiKey)
+            return@withContext if (geminiResult.isSuccess) {
+                val polished = geminiResult.getOrThrow()
+                Log.d(TAG, "GEMINI SUCCESS: '$polished'")
+                Result.success(PipelineOutput(text = sanitizeAndFormatText(polished), isFallback = false))
+            } else {
+                val err = geminiResult.exceptionOrNull()?.message ?: "Errore sconosciuto Gemini"
+                Log.e(TAG, "Gemini fallito: $err")
+                Result.success(PipelineOutput(
+                    text = "",
+                    isFallback = true,
+                    errorMessage = err
+                ))
+            }
+        }
+
+        // PIPELINE STANDARD A 2 STADI (Whisper STT + LLM Polisher) per Groq e OpenAI
         // 1. STADIO 1: Speech-To-Text con Whisper
         val rawTranscription = transcribeAudio(audioFile, apiKey, provider)
             .getOrElse { return@withContext Result.failure(it) }
@@ -70,6 +90,84 @@ class AiPipelineClient(private val prefs: PreferencesManager) {
         }
 
         Result.success(finalOutput)
+    }
+
+    private fun processGeminiMultimodalAudio(audioFile: File, apiKey: String): Result<String> {
+        val audioBytes = try {
+            audioFile.readBytes()
+        } catch (e: Exception) {
+            return Result.failure(IOException("Impossibile leggere file audio per Gemini: ${e.message}"))
+        }
+
+        val base64Audio = android.util.Base64.encodeToString(audioBytes, android.util.Base64.NO_WRAP)
+        val candidateModels = listOf("gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash")
+
+        var lastError: Exception? = null
+        for (modelName in candidateModels) {
+            val payload = JSONObject().apply {
+                put("system_instruction", JSONObject().apply {
+                    put("parts", JSONArray().apply {
+                        put(JSONObject().apply { put("text", prefs.activePreset.prompt) })
+                    })
+                })
+                put("contents", JSONArray().apply {
+                    put(JSONObject().apply {
+                        put("role", "user")
+                        put("parts", JSONArray().apply {
+                            put(JSONObject().apply {
+                                put("text", "Trascrivi e formatta il parlato di questo file audio secondo le istruzioni del sistema (virgolette caporali per citazioni o app, paragrafi con a capo, punteggiatura d'autore e rimozione totale degli intercalari). Restituisci ESCLUSIVAMENTE il testo elaborato.")
+                            })
+                            put(JSONObject().apply {
+                                put("inline_data", JSONObject().apply {
+                                    put("mime_type", "audio/mp4")
+                                    put("data", base64Audio)
+                                })
+                            })
+                        })
+                    })
+                })
+                put("generationConfig", JSONObject().apply {
+                    put("temperature", 0.2)
+                    put("maxOutputTokens", 1200)
+                })
+            }
+
+            val jsonMediaType = "application/json; charset=utf-8".toMediaType()
+            val request = Request.Builder()
+                .url("https://generativelanguage.googleapis.com/v1beta/models/$modelName:generateContent?key=${apiKey.trim()}")
+                .post(payload.toString().toRequestBody(jsonMediaType))
+                .build()
+
+            try {
+                val response = httpClient.newCall(request).execute()
+                val responseBody = response.body?.string() ?: ""
+                if (response.isSuccessful) {
+                    val json = JSONObject(responseBody)
+                    val candidates = json.optJSONArray("candidates")
+                    if (candidates != null && candidates.length() > 0) {
+                        val content = candidates.getJSONObject(0).optJSONObject("content")
+                        val parts = content?.optJSONArray("parts")
+                        if (parts != null && parts.length() > 0) {
+                            val text = parts.getJSONObject(0).optString("text", "").trim()
+                            if (text.isNotBlank()) {
+                                return Result.success(text)
+                            }
+                        }
+                    }
+                    return Result.failure(IOException("Risposta Gemini priva di testo generato."))
+                } else {
+                    lastError = IOException("Gemini ($modelName) HTTP ${response.code}: $responseBody")
+                    // Se è 404, proseguiamo al modello successivo
+                    if (response.code != 404) {
+                        return Result.failure(lastError)
+                    }
+                }
+            } catch (e: Exception) {
+                lastError = e
+            }
+        }
+
+        return Result.failure(lastError ?: IOException("Tutti i modelli Gemini hanno fallito"))
     }
 
     private fun transcribeAudio(
@@ -121,7 +219,7 @@ class AiPipelineClient(private val prefs: PreferencesManager) {
         val cleanKey = apiKey.trim()
         val cleanBaseUrl = provider.baseUrl.trim().removeSuffix("/")
 
-        // 1. Tentativo Primario (es. Llama 3.3 70B Versatile su Groq o GPT-4o-mini su OpenAI)
+        // 1. Tentativo Primario
         val primaryResult = executeLlmCall(rawText, cleanKey, cleanBaseUrl, provider.llmModel)
         if (primaryResult.isSuccess) {
             return primaryResult
@@ -130,18 +228,61 @@ class AiPipelineClient(private val prefs: PreferencesManager) {
         val primaryError = primaryResult.exceptionOrNull()?.message ?: "Errore sconosciuto"
         Log.w(TAG, "Tentativo primario fallito con ${provider.llmModel}: $primaryError")
 
-        // 2. Fallback Istantaneo per Groq: se 70B fallisce (rate limit 429, timeout, ecc.),
-        // ritenta immediatamente con Llama 3.1 8B Instant (30.000 TPM, throughput ultra-veloce, zero blocchi)
-        if (provider == com.openflow.android.data.ApiProvider.GROQ && provider.llmModel != "llama-3.1-8b-instant") {
-            Log.i(TAG, "Eseguo fallback istantaneo su Groq 'llama-3.1-8b-instant'...")
-            val fallbackResult = executeLlmCall(rawText, cleanKey, cleanBaseUrl, "llama-3.1-8b-instant")
-            if (fallbackResult.isSuccess) {
-                Log.i(TAG, "Fallback Groq 8B riuscito con successo!")
-                return fallbackResult
+        // 2. Per Groq: fallback su modelli attivi della nuova generazione
+        if (provider == com.openflow.android.data.ApiProvider.GROQ) {
+            val fallbackCandidates = listOf(
+                "openai/gpt-oss-120b",
+                "openai/gpt-oss-20b",
+                "qwen/qwen3.8-27b"
+            )
+            for (candidate in fallbackCandidates) {
+                if (candidate != provider.llmModel) {
+                    Log.i(TAG, "Tentativo fallback Groq con '$candidate'...")
+                    val res = executeLlmCall(rawText, cleanKey, cleanBaseUrl, candidate)
+                    if (res.isSuccess) {
+                        Log.i(TAG, "Fallback Groq riuscito con $candidate!")
+                        return res
+                    }
+                }
+            }
+
+            // 3. Fallback dinamico: interroga /models su Groq
+            Log.i(TAG, "Tentativo auto-discovery modelli attivi su Groq...")
+            val discoveredModel = discoverActiveGroqModel(cleanKey)
+            if (discoveredModel != null && discoveredModel != provider.llmModel) {
+                Log.i(TAG, "Trovato modello attivo Groq: $discoveredModel")
+                val res = executeLlmCall(rawText, cleanKey, cleanBaseUrl, discoveredModel)
+                if (res.isSuccess) {
+                    return res
+                }
             }
         }
 
         return primaryResult
+    }
+
+    private fun discoverActiveGroqModel(apiKey: String): String? {
+        return try {
+            val req = Request.Builder()
+                .url("https://api.groq.com/openai/v1/models")
+                .addHeader("Authorization", "Bearer $apiKey")
+                .get()
+                .build()
+            val resp = httpClient.newCall(req).execute()
+            val body = resp.body?.string() ?: ""
+            if (!resp.isSuccessful) return null
+            val json = JSONObject(body)
+            val data = json.optJSONArray("data") ?: return null
+            for (i in 0 until data.length()) {
+                val id = data.getJSONObject(i).optString("id", "")
+                if (id.isNotBlank() && !id.contains("whisper") && !id.contains("guard") && !id.contains("moderation")) {
+                    return id
+                }
+            }
+            null
+        } catch (_: Exception) {
+            null
+        }
     }
 
     private fun executeLlmCall(

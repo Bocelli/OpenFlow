@@ -6,17 +6,23 @@ import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKeys
 
 enum class ApiProvider(val displayName: String, val baseUrl: String, val asrModel: String, val llmModel: String) {
+    GROQ(
+        displayName = "Groq (Free LPU ~200ms)",
+        baseUrl = "https://api.groq.com/openai/v1",
+        asrModel = "whisper-large-v3-turbo",
+        llmModel = "openai/gpt-oss-120b"
+    ),
+    GEMINI(
+        displayName = "Google Gemini (Free AI Studio)",
+        baseUrl = "https://generativelanguage.googleapis.com/v1beta",
+        asrModel = "multimodal",
+        llmModel = "gemini-2.5-flash"
+    ),
     OPENAI(
-        displayName = "OpenAI",
+        displayName = "OpenAI (Wispr Flow Nativo)",
         baseUrl = "https://api.openai.com/v1",
         asrModel = "whisper-1",
         llmModel = "gpt-4o-mini"
-    ),
-    GROQ(
-        displayName = "Groq (Ultra-Veloce ~250ms)",
-        baseUrl = "https://api.groq.com/openai/v1",
-        asrModel = "whisper-large-v3-turbo",
-        llmModel = "llama-3.3-70b-versatile"
     )
 }
 
@@ -136,6 +142,10 @@ class PreferencesManager(context: Context) {
         get() = prefs.getString(KEY_GROQ_KEY, "") ?: ""
         set(value) = prefs.edit().putString(KEY_GROQ_KEY, value.trim()).apply()
 
+    var geminiKey: String
+        get() = prefs.getString(KEY_GEMINI_KEY, "") ?: ""
+        set(value) = prefs.edit().putString(KEY_GEMINI_KEY, value.trim()).apply()
+
     var activeProvider: ApiProvider
         get() {
             val name = prefs.getString(KEY_ACTIVE_PROVIDER, ApiProvider.GROQ.name)
@@ -166,6 +176,7 @@ class PreferencesManager(context: Context) {
         get() = when (activeProvider) {
             ApiProvider.OPENAI -> openAiKey
             ApiProvider.GROQ -> groqKey
+            ApiProvider.GEMINI -> geminiKey
         }
 
     fun isConfigured(): Boolean = currentApiKey.isNotBlank()
@@ -173,6 +184,7 @@ class PreferencesManager(context: Context) {
     companion object {
         private const val KEY_OPENAI_KEY = "key_openai_token"
         private const val KEY_GROQ_KEY = "key_groq_token"
+        private const val KEY_GEMINI_KEY = "key_gemini_token"
         private const val KEY_ACTIVE_PROVIDER = "key_active_provider"
         private const val KEY_ACTIVE_PRESET = "key_active_preset"
         private const val KEY_LANGUAGE = "key_language"
