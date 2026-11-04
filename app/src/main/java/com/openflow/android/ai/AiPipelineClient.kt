@@ -130,7 +130,7 @@ class AiPipelineClient(private val prefs: PreferencesManager) {
         val requestPayload = JSONObject().apply {
             put("model", provider.llmModel)
             put("messages", messagesArray)
-            put("temperature", 0.1) // Bassa temperatura per massima fedeltà
+            put("temperature", 0.15) // Calibrazione ottimale per Llama 3.3 70B (stile Wispr Flow)
         }
 
         val jsonMediaType = "application/json; charset=utf-8".toMediaType()
@@ -175,6 +175,11 @@ class AiPipelineClient(private val prefs: PreferencesManager) {
                 clean = clean.substring(prefix.length).trim()
             }
         }
+        // Rimuove eventuali blocchi di codice markdown ```text ... ``` se il modello dovesse usarli
+        if (clean.startsWith("```") && clean.endsWith("```")) {
+            clean = clean.substringAfter("\n").substringBeforeLast("```").trim()
+        }
+
         // Rimuove eventuali virgolette all'inizio e alla fine
         if (clean.startsWith("\"") && clean.endsWith("\"") && clean.length > 1) {
             clean = clean.substring(1, clean.length - 1).trim()

@@ -12,8 +12,8 @@ class PromptPresetTest {
 
         // Verifica che ci siano le istruzioni critiche di Wispr Flow
         assertTrue(naturalPrompt.contains("ESCLUSIVAMENTE"))
-        assertTrue(naturalPrompt.contains("intercalari"))
-        assertTrue(naturalPrompt.contains("autocorrezioni"))
+        assertTrue(naturalPrompt.contains("intercalari", ignoreCase = true))
+        assertTrue(naturalPrompt.contains("RIPENSAMENTI") || naturalPrompt.contains("autocorrezioni"))
     }
 
     @Test

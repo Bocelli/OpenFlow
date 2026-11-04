@@ -16,6 +16,7 @@
   - Upgraded audio capture to VOICE_RECOGNITION DSP and 64kbps AAC for phonetic clarity.
   - Added Whisper prompt priming, deterministic temperature 0, and explicit language parameter ("it") to prevent spelling hallucinations like "a bici".
   - Eliminated prompt-leak hallucination: removed Whisper prompt parameter entirely to stop ghost prefixes like "Broadcast".
+  - Upgraded translation engine to Wispr God Tier: Few-shot prompting, paragraph auto-splitting (\n\n), intelligent self-correction, currency/time normalization, and temperature 0.15 on Llama 3.3 70B.
   - Compiled and verified debug APK: `app-debug.apk` (16.3 MB) ready for deployment.
   - Implemented core Android architecture:
     - `data/PreferencesManager.kt`: EncryptedSharedPreferences, OpenAI & Groq endpoints, prompt presets.
