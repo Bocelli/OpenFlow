@@ -104,19 +104,21 @@ class AiPipelineClient(private val prefs: PreferencesManager) {
 
         val base64Audio = android.util.Base64.encodeToString(audioBytes, android.util.Base64.NO_WRAP)
         
-        // 1. Costruiamo la lista candidati: cache -> scoperta dinamica ListModels -> modelli 2026
+        // 1. Costruiamo la lista candidati ordinata: cache -> modelli attivi scoperti da ListModels -> default 2026
         val candidateModels = mutableListOf<String>()
         cachedGeminiModel?.let { candidateModels.add(it) }
 
-        val discovered = discoverActiveGeminiModel(apiKey)
-        if (discovered != null && !candidateModels.contains(discovered)) {
-            candidateModels.add(discovered)
+        val discoveredList = discoverActiveGeminiModels(apiKey)
+        for (m in discoveredList) {
+            if (!candidateModels.contains(m)) {
+                candidateModels.add(m)
+            }
         }
 
         val defaultFallbacks = listOf(
-            "gemini-3.8-flash",
-            "gemini-3.5-flash",
             "gemini-3.5-flash-lite",
+            "gemini-3.5-flash",
+            "gemini-3.8-flash",
             "gemini-2.5-flash",
             "gemini-2.0-flash"
         )
@@ -177,28 +179,30 @@ class AiPipelineClient(private val prefs: PreferencesManager) {
                             val text = parts.getJSONObject(0).optString("text", "").trim()
                             if (text.isNotBlank()) {
                                 cachedGeminiModel = modelName
+                                Log.i(TAG, "Gemini riuscito con successo su modello: $modelName!")
                                 return Result.success(text)
                             }
                         }
                     }
-                    return Result.failure(IOException("Risposta Gemini priva di testo generato."))
+                    lastError = IOException("Risposta Gemini priva di testo generato.")
                 } else {
                     lastError = IOException("Gemini ($modelName) HTTP ${response.code}: $responseBody")
-                    // Se è 404, invalidiamo la cache e proseguiamo al modello successivo
-                    if (cachedGeminiModel == modelName) cachedGeminiModel = null
-                    if (response.code != 404) {
-                        return Result.failure(lastError)
+                    Log.w(TAG, "Modello $modelName fallito (HTTP ${response.code}). Tento modello successivo...")
+                    // Se il modello in cache fallisce (es. 503 sovraccarico temporaneo, 429 rate limit o 404), azzera la cache e prova subito il prossimo candidato
+                    if (cachedGeminiModel == modelName) {
+                        cachedGeminiModel = null
                     }
                 }
             } catch (e: Exception) {
                 lastError = e
+                Log.w(TAG, "Eccezione durante chiamata a $modelName: ${e.message}. Tento successivo...")
             }
         }
 
         return Result.failure(lastError ?: IOException("Tutti i modelli Gemini hanno fallito"))
     }
 
-    private fun discoverActiveGeminiModel(apiKey: String): String? {
+    private fun discoverActiveGeminiModels(apiKey: String): List<String> {
         val cleanKey = apiKey.trim()
         val url = "https://generativelanguage.googleapis.com/v1beta/models?key=$cleanKey&pageSize=100"
         return try {
@@ -207,16 +211,16 @@ class AiPipelineClient(private val prefs: PreferencesManager) {
             val body = response.body?.string() ?: ""
             if (!response.isSuccessful) {
                 Log.e(TAG, "ListModels Gemini fallito HTTP ${response.code}: $body")
-                return null
+                return emptyList()
             }
 
             val json = JSONObject(body)
-            val modelsArray = json.optJSONArray("models") ?: return null
+            val modelsArray = json.optJSONArray("models") ?: return emptyList()
             val candidates = mutableListOf<String>()
 
             for (i in 0 until modelsArray.length()) {
                 val modelObj = modelsArray.getJSONObject(i)
-                val name = modelObj.optString("name", "") // es: "models/gemini-3.8-flash"
+                val name = modelObj.optString("name", "") // es: "models/gemini-3.5-flash"
                 val methods = modelObj.optJSONArray("supportedGenerationMethods")
                 var supportsGenerateContent = false
                 if (methods != null) {
@@ -232,19 +236,28 @@ class AiPipelineClient(private val prefs: PreferencesManager) {
                 }
             }
 
-            Log.i(TAG, "Modelli Gemini disponibili per la chiave: $candidates")
+            Log.i(TAG, "Modelli Gemini disponibili trovati (${candidates.size}): $candidates")
 
-            // Preferiamo i modelli Flash più veloci e moderni
-            val chosen = candidates.firstOrNull { it.contains("3.8-flash", ignoreCase = true) }
-                ?: candidates.firstOrNull { it.contains("3.5-flash", ignoreCase = true) }
-                ?: candidates.firstOrNull { it.contains("flash", ignoreCase = true) }
-                ?: candidates.firstOrNull { it.contains("gemini", ignoreCase = true) }
-                ?: candidates.firstOrNull()
-
-            chosen
+            // Ordiniamo dando priorità ai modelli ad altissima disponibilità e velocità (Flash-Lite e 3.5 Flash)
+            // in modo da evitare sovraccarichi (HTTP 503) sui modelli in anteprima
+            candidates.sortedWith(Comparator { a, b ->
+                fun score(name: String): Int {
+                    val n = name.lowercase()
+                    return when {
+                        n.contains("3.5-flash-lite") -> 100 // Altissima capacità, throughput continuo
+                        n.contains("3.5-flash") -> 90
+                        n.contains("3.8-flash") -> 80
+                        n.contains("2.5-flash") -> 70
+                        n.contains("flash") -> 60
+                        n.contains("gemini") -> 50
+                        else -> 10
+                    }
+                }
+                score(b).compareTo(score(a))
+            })
         } catch (e: Exception) {
             Log.e(TAG, "Eccezione durante ListModels Gemini: ${e.message}", e)
-            null
+            emptyList()
         }
     }
 
