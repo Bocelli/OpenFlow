@@ -40,6 +40,16 @@
     - Fixed JSON parser bug: if choices were missing, it previously returned `Result.success(rawText)`, which tricked the pipeline into thinking the call succeeded and prevented fallback.
     - Removed `contextText` pollution from system prompt to stop confusing Llama with prior draft text.
     - Added explicit in-field diagnostic prefix on fallback so any API failure is immediately visible.
+  - Custom Brand Identity: OpenFlow Acoustic Signature Glyph & Android Adaptive Icon:
+    - Purged generic 2012 podcast microphone icons from both the floating bubble overlay and the Android launcher.
+    - Designed custom **OpenFlow Acoustic Signature Glyph**:
+      - In `FloatingBubbleOverlay.kt`: replaced primitive mic head & stand with 3 harmonic vertical acoustic flow pillars (11dp, 19dp, 13dp) with rounded caps in high-contrast zinc/white. Seamlessly expands into the 5-bar live responsive waveform on recording.
+      - In `MainActivity.kt`: updated TopBar brand icon to match the 3-bar acoustic signature glyph.
+    - Designed custom **Android Adaptive Launcher Icon** (`ic_launcher.xml`, `ic_launcher_background.xml`, `ic_launcher_foreground.xml` in `mipmap-anydpi-v26`):
+      - Background: Matte deep obsidian canvas (`#0C0D0F`) with dual technical concentric acoustic hairline orbits (`#1F212A` and `#16171E`).
+      - Foreground: 5 sculpted harmonic flow pillars (heights 20 to 52) with high-contrast zinc gradient and a discrete emerald intelligence focal dot at the base (`#10B981`).
+      - Full Android 8+ Adaptive Icon support (dynamic squircle, circle, and parallax launcher masking).
+    - Verified compilation & tests passed: new APK `OpenFlow-debug.apk` (16.4 MB).
   - Redesigned UI to Swiss Minimalist / Modern Technical Anti-Slop Aesthetic:
     - Consulted `awesome-ai-tools-for-ui` anti-slop guidelines: purged all generic neon purple gradients, glowing borders, and visual clutter.
     - Implemented a disciplined, restrained dark palette:
