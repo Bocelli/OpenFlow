@@ -130,7 +130,7 @@ class AiPipelineClient(private val prefs: PreferencesManager) {
         val requestPayload = JSONObject().apply {
             put("model", provider.llmModel)
             put("messages", messagesArray)
-            put("temperature", 0.15) // Calibrazione ottimale per Llama 3.3 70B (stile Wispr Flow)
+            put("temperature", 0.35) // Temperatura ideale per sbloccare la prosa narrativa e la punteggiatura d'autore
         }
 
         val jsonMediaType = "application/json; charset=utf-8".toMediaType()

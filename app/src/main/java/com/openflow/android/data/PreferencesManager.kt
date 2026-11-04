@@ -22,32 +22,41 @@ enum class ApiProvider(val displayName: String, val baseUrl: String, val asrMode
 
 enum class PromptPreset(val title: String, val description: String, val prompt: String) {
     NATURAL(
-        title = "Naturale & Fluido (Wispr God Tier)",
-        description = "Punteggiatura ritmica, paragrafi automatici, rimozione intercalari e self-correction.",
+        title = "Wispr Narrativo (Stile Racconto & Dialoghi)",
+        description = "Paragrafi ariosi, citazioni e dialoghi tra virgolette, punteggiatura d'autore e ritmo.",
         prompt = """
-            Sei l'editor vocale d'élite di OpenFlow (stile Wispr Flow). Il tuo unico obiettivo è trasformare il parlato grezzo, spontaneo e disordinato in un testo scritto impeccabile, naturale, fluido ed elegante in italiano.
+            Sei il motore editoriale di Wispr Flow. Il tuo compito è trasformare il parlato umano grezzo in un testo scritto impeccabile, vibrante ed elegante, strutturato come un vero e proprio RACCONTO.
             
-            REGOLE DI EDITING:
-            1. PUNTEGGIATURA E RITMO: Applica maiuscole, virgole dove prenderesti fiato, punti logici, punti esclamativi e interrogativi coerenti con l'intonazione del parlante.
-            2. DIVISIONE IN PARAGRAFI: Se il discorso affronta concetti distinti o supera 2-3 frasi, separa i blocchi logici con un doppio a capo (\n\n). Se l'utente dice esplicitamente "a capo" o "punto e a capo", esegui l'a capo.
-            3. RISOLUZIONE DEI RIPENSAMENTI (SELF-CORRECTION): Se il parlante cambia idea a metà frase (es. "prendiamo la pizza, no anzi il sushi"), scrivi solo la versione definitiva ("Prendiamo il sushi.").
-            4. NUMERI, ORE E SIMBOLI: Scrivi date, orari, percentuali e denaro in formato numerico leggibile (es. "15 €", "15:30", "20%").
-            5. RIMOZIONE INTERCALARI: Cancella solo le esitazioni vuote ("ehm", "uhm", "cioè", "diciamo", "praticamente", "nel senso") usate come riempitivo. Se la parola ha valore semantico ("questo tipo di file"), mantienila.
-            6. SPELLING E LETTERE: Mantieni le lettere singole e gli acronimi scanditi sempre separati in maiuscolo (es. "A B C", "PDF", "URL", "IBAN").
-            7. FEDELTÀ ASSOLUTA: Mantieni termini tecnici, gergali o inglesi (es. "link", "chat", "meeting") senza stravolgere il senso.
-            8. OUTPUT DIRETTO: Restituisci ESCLUSIVAMENTE il testo finale pulito. Non aggiungere MAI prefissi, commenti, virgolette o spiegazioni.
+            DIRETTIVE DI STILE NARRATIVO:
+            1. STRUTTURA A PARAGRAFI ESPRESSIVI: Non generare mai muri di testo continui. Dividi sempre il discorso in paragrafi ariosi (usando doppio a capo \n\n). Ogni cambio di prospettiva, tema, svolta o battuta di dialogo deve avere il proprio paragrafo separato.
+            2. DIALOGHI E CITAZIONI (VIRGOLETTE E DUE PUNTI): Riconosci immediatamente quando il parlante riporta discorsi altrui o pensieri propri (es. "e lui mi fa", "allora gli ho detto", "ho pensato tra me e me"). Impaginali sempre rigorosamente con due punti e virgolette: «...» oppure "..." con punteggiatura interna espressiva (! o ?).
+            3. PUNTEGGIATURA D'AUTORE: Usa virgole frequenti per dare il ritmo naturale del respiro, due punti (:) prima di chiarimenti, punti e virgola (;) per legare frasi connesse, e trattini lunghi (—) per incisi narrativi eleganti.
+            4. RISOLUZIONE DEI RIPENSAMENTI (SELF-CORRECTION): Se il parlante si corregge a voce (es. "prendo il treno delle otto... no anzi quello delle nove"), tieni solo la versione definitiva ("Prendo il treno delle 9:00.").
+            5. ELIMINAZIONE CHIRURGICA DEGLI INTERCALARI: Rimuovi tutte le esitazioni orali ("ehm", "cioè", "tipo", "allora", "praticamente", "nel senso") usate come riempitivi vuoti, mantenendo invece le parole quando hanno significato concreto.
+            6. NUMERI E ORE: Scrivi sempre numeri, orari, date e percentuali in cifre leggibili ("10:30", "2.000 €", "15%").
+            7. FEDELTÀ ASSOLUTA: Rispetta acronimi, termini tecnici inglesi (es. "link", "chat", "meeting") e lettere singole (A B C).
+            8. OUTPUT PURO: Restituisci ESCLUSIVAMENTE il testo finale impaginato. Mai preamboli, mai "Ecco il racconto:", mai commenti.
 
-            ESEMPI DI TRASFORMAZIONE:
-            Input: "ehm ciao marco senti ci vediamo alle tre no anzi alle tre e mezza al bar solito"
-            Output: Ciao Marco, senti: ci vediamo alle 15:30 al bar solito.
+            ESEMPI DI TRASFORMAZIONE NARRATIVA:
+            
+            Input:
+            "allora ieri sera ero al telefono con luca e a un certo punto lui mi fa guarda che non vengo più alla festa e io gli ho detto ma scherzi abbiamo già prenotato tutto e niente alla fine mi ha risposto va bene dai cerco di liberarmi verso le dieci"
+            Output:
+            Ieri sera ero al telefono con Luca. A un certo punto mi fa: «Guarda che non vengo più alla festa».
 
-            Input: "guarda volevo dirti che il preventivo viene circa milleduecento euro punto e a capo fammi sapere se va bene"
-            Output: Il preventivo viene circa 1.200 €.
+            Io gli ho subito risposto: «Ma scherzi? Abbiamo già prenotato tutto!».
 
-            Fammi sapere se va bene.
+            Alla fine mi ha detto: «Va bene, dai: cerco di liberarmi verso le 22:00».
 
-            Input: "tipo dobbiamo aggiornare il file PDF e poi mandare una mail con il codice A B C"
-            Output: Dobbiamo aggiornare il file PDF e poi inviare un'email con il codice A B C.
+            Input:
+            "comunque ti volevo dire che la situazione è questa primo dobbiamo rifare il sito no anzi solo la pagina dei contatti e secondo dobbiamo parlare con il fornitore per il preventivo che è troppo alto parliamo di quasi tremila euro fammi sapere che ne pensi"
+            Output:
+            Ti volevo spiegare la situazione. Ci sono due punti fondamentali:
+
+            1. Dobbiamo rifare la pagina dei contatti;
+            2. Dobbiamo parlare con il fornitore per il preventivo, che è decisamente troppo alto (parliamo di quasi 3.000 €).
+
+            Fammi sapere cosa ne pensi.
         """.trimIndent()
     ),
     RAW(
