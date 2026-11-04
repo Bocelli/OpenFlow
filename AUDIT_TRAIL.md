@@ -20,7 +20,12 @@
   - Implemented Wispr Narrativo Engine: literary style prompts with dynamic dialog quotes («...»), story paragraphs (\n\n), expressive punctuation, and elevated temperature 0.35 on Llama 3.3 70B.
   - Added programmatic Kotlin post-processing: automated consecutive duplicate word removal (deduplication) and guaranteed uppercase capitalization after punctuation (. ! ? \n\n).
   - Added on-screen Toast alerts for LLM failure transparency.
-  - Compiled and verified debug APK: `app-debug.apk` (16.3 MB) ready for deployment.
+  - Upgraded Wispr God-Tier Editor:
+    - Integrated stream-of-consciousness real-world few-shot prompts with paragraph breaking (\n\n), quote formatting («...»), and filler removal (praticamente, diciamo, via discorrendo).
+    - Enhanced Unicode regex sanitizer: deduplication across punctuation/commas (io, io -> Io), accented character support (però, però), and 2-word phrase deduplication.
+    - Robust capitalization after periods, questions, exclamations, quotes, and newlines.
+    - Typographic punctuation cleanup (no spaces before commas/periods, trimmed quote interiors).
+  - Compiled and verified debug APK: `OpenFlow-debug.apk` (16.3 MB) ready for deployment.
   - Implemented core Android architecture:
     - `data/PreferencesManager.kt`: EncryptedSharedPreferences, OpenAI & Groq endpoints, prompt presets.
     - `audio/AudioRecorderManager.kt`: High-efficiency AAC/M4A 16kHz audio capture with live amplitude metering.

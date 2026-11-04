@@ -146,7 +146,8 @@ class AiPipelineClient(private val prefs: PreferencesManager) {
         val requestPayload = JSONObject().apply {
             put("model", provider.llmModel)
             put("messages", messagesArray)
-            put("temperature", 0.2) // 0.2: ideale per coniugare creatività di punteggiatura e rigore grammaticale
+            put("temperature", 0.3) // 0.3: equilibrio ideale tra eleganza formattazione e fedeltà all'intento
+            put("max_tokens", 2048)
         }
 
         val jsonMediaType = "application/json; charset=utf-8".toMediaType()
@@ -179,69 +180,89 @@ class AiPipelineClient(private val prefs: PreferencesManager) {
         }
     }
 
-    /**
-     * Sanitizzazione e Garanzia di Qualità Sintattica:
-     * 1. Elimina prefissi spuri
-     * 2. Rimuove parole ripetute / balbettii consecutivi (es. "io io" -> "io")
-     * 3. Forza MAIUSCOLA dopo ogni punto fermo (. ! ?)
-     * 4. Assicura che la prima lettera del testo sia sempre maiuscola
-     * 5. Converte acustica "abici" -> "A B C"
-     */
-    fun sanitizeAndFormatText(output: String): String {
-        var clean = output.trim()
-
-        // 1. Rimuove prefissi spuri
-        val prefixesToRemove = listOf(
-            "Broadcast:", "Broadcast :", "Broadcast",
-            "Message:", "Message :", "Messaggio:", "Messaggio :",
-            "Testo:", "Testo :", "Trascrizione:", "Output:",
-            "Ecco il testo:", "Ecco la trascrizione:"
-        )
-        for (prefix in prefixesToRemove) {
-            if (clean.startsWith(prefix, ignoreCase = true)) {
-                clean = clean.substring(prefix.length).trim()
-            }
-        }
-
-        // 2. Rimuove blocchi markdown ```text ... ```
-        if (clean.startsWith("```") && clean.endsWith("```")) {
-            clean = clean.substringAfter("\n").substringBeforeLast("```").trim()
-        }
-
-        // 3. Rimuove virgolette esterne superflue se racchiudono tutto il blocco
-        if (clean.startsWith("\"") && clean.endsWith("\"") && clean.count { it == '"' } == 2) {
-            clean = clean.substring(1, clean.length - 1).trim()
-        }
-
-        // 4. Correzione fonetica per lo spelling ("abici" / "a bici" -> "A B C")
-        clean = clean.replace(Regex("""\b(abici|abbiccì|a\s+bici)\b""", RegexOption.IGNORE_CASE), "A B C")
-
-        // 5. Deduplicazione automatica parole consecutive (elimina balbettii intenzionali o involontari)
-        // Ripete finché non ci sono più parole doppie consecutive
-        val duplicateRegex = Regex("""\b(\w+)\s+\1\b""", RegexOption.IGNORE_CASE)
-        while (duplicateRegex.containsMatchIn(clean)) {
-            clean = clean.replace(duplicateRegex) { match -> match.groupValues[1] }
-        }
-
-        // 6. Forza MAIUSCOLA dopo ogni punto (. ! ? o a capo)
-        clean = clean.replace(Regex("""([.!?]\s+)([a-zàèéìòù])""")) { match ->
-            match.groupValues[1] + match.groupValues[2].uppercase()
-        }
-
-        // 7. Forza MAIUSCOLA dopo doppio a capo (\n\n)
-        clean = clean.replace(Regex("""(\n+\s*)([a-zàèéìòù])""")) { match ->
-            match.groupValues[1] + match.groupValues[2].uppercase()
-        }
-
-        // 8. Prima lettera dell'intero testo sempre maiuscola
-        if (clean.isNotEmpty()) {
-            clean = clean.replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() }
-        }
-
-        return clean.trim()
-    }
-
     companion object {
         private const val TAG = "AiPipelineClient"
+
+        /**
+         * Sanitizzazione deterministica e Garanzia di Qualità Tipografica (Wispr Engine):
+         * 1. Elimina prefissi spuri (Broadcast, Message, Ecco il testo, ecc.)
+         * 2. Rimuove blocchi markdown e virgolette di contorno superflue
+         * 3. Corregge fonetica dello spelling ("a bici" -> "A B C")
+         * 4. Deduplica parole e frasi ripetute (anche con virgole o pause, es. "io, io", "però, però")
+         * 5. Pulisce spaziature prima della punteggiatura ed elimina spazi interni a virgolette
+         * 6. Forza MAIUSCOLA dopo ogni punto (. ! ? \n\n) anche se preceduta da virgolette o parentesi
+         * 7. Prima lettera dell'intero testo sempre maiuscola
+         */
+        fun sanitizeAndFormatText(output: String): String {
+            var clean = output.trim()
+
+            // 1. Rimuove prefissi spuri
+            val prefixesToRemove = listOf(
+                "Broadcast:", "Broadcast :", "Broadcast",
+                "Message:", "Message :", "Messaggio:", "Messaggio :",
+                "Testo:", "Testo :", "Trascrizione:", "Output:",
+                "Ecco il testo:", "Ecco la trascrizione:", "Ecco il testo formattato:", "Ecco il racconto:"
+            )
+            for (prefix in prefixesToRemove) {
+                if (clean.startsWith(prefix, ignoreCase = true)) {
+                    clean = clean.substring(prefix.length).trim()
+                }
+            }
+
+            // 2. Rimuove blocchi markdown ```text ... ```
+            if (clean.startsWith("```") && clean.endsWith("```")) {
+                clean = clean.substringAfter("\n").substringBeforeLast("```").trim()
+            }
+
+            // 3. Rimuove virgolette esterne superflue se racchiudono l'INTERO blocco
+            if ((clean.startsWith("\"") && clean.endsWith("\"") && clean.count { it == '"' } == 2) ||
+                (clean.startsWith("«") && clean.endsWith("»") && clean.count { it == '«' } == 1 && clean.count { it == '»' } == 1)) {
+                clean = clean.substring(1, clean.length - 1).trim()
+            }
+
+            // 4. Correzione fonetica per lo spelling ("abici" / "a bici" -> "A B C")
+            clean = clean.replace(Regex("""\b(abici|abbiccì|a\s+bici)\b""", RegexOption.IGNORE_CASE), "A B C")
+
+            // 5. Deduplicazione automatica parole consecutive (elimina balbettii con pause, virgole o spazi)
+            // Usa \p{L} per supportare qualsiasi carattere Unicode (inclusi accenti italiani: à è é ì ò ù)
+            val duplicateSingleWordRegex = Regex("""\b(\p{L}+)[\s,.;:-]+\1\b""", RegexOption.IGNORE_CASE)
+            while (duplicateSingleWordRegex.containsMatchIn(clean)) {
+                clean = clean.replace(duplicateSingleWordRegex) { match -> match.groupValues[1] }
+            }
+
+            // Deduplicazione per frasi di due parole duplicate consecutive (es. "sto facendo, sto facendo" -> "sto facendo")
+            val duplicateTwoWordsRegex = Regex("""\b(\p{L}+[\s,]+\p{L}+)[\s,.;:-]+\1\b""", RegexOption.IGNORE_CASE)
+            while (duplicateTwoWordsRegex.containsMatchIn(clean)) {
+                clean = clean.replace(duplicateTwoWordsRegex) { match -> match.groupValues[1] }
+            }
+
+            // 6. Normalizzazione spaziature tipografiche
+            // Elimina spazi prima di virgole, punti, due punti, punti e virgola, interrogativi ed esclamativi
+            clean = clean.replace(Regex("""\s+([,.:;!?])"""), "$1")
+
+            // Rimuove spazi interni alle virgolette: « ciao » -> «ciao», " test " -> "test"
+            clean = clean.replace(Regex("""([«"“])\s+"""), "$1")
+            clean = clean.replace(Regex("""\s+([»"”])"""), "$1")
+
+            // Normalizza spazi orizzontali multipli (preservando i ritorni a capo \n)
+            clean = clean.replace(Regex("""[^\S\r\n]{2,}"""), " ")
+
+            // 7. Forza MAIUSCOLA dopo ogni punto (. ! ?) anche in presenza di virgolette o parentesi
+            clean = clean.replace(Regex("""([.!?]\s*["'«“‘(\[]?\s*)([\p{Ll}])""")) { match ->
+                match.groupValues[1] + match.groupValues[2].uppercase()
+            }
+
+            // 8. Forza MAIUSCOLA dopo ritorni a capo (\n\n o \n) anche in presenza di virgolette o parentesi
+            clean = clean.replace(Regex("""(\n+\s*["'«“‘(\[]?\s*)([\p{Ll}])""")) { match ->
+                match.groupValues[1] + match.groupValues[2].uppercase()
+            }
+
+            // 9. Prima lettera dell'intero testo sempre maiuscola
+            if (clean.isNotEmpty()) {
+                clean = clean.replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() }
+            }
+
+            return clean.trim()
+        }
     }
 }

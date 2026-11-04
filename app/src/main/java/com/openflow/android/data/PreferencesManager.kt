@@ -22,42 +22,79 @@ enum class ApiProvider(val displayName: String, val baseUrl: String, val asrMode
 
 enum class PromptPreset(val title: String, val description: String, val prompt: String) {
     NATURAL(
-        title = "Wispr Narrativo (Stile Racconto & Dialoghi)",
-        description = "Paragrafi ariosi, citazioni e dialoghi tra virgolette, punteggiatura d'autore e ritmo.",
+        title = "Wispr God-Tier (Formattazione Intelligente)",
+        description = "Paragrafi ariosi, virgolette per citazioni/app, punteggiatura d'autore e rimozione intercalari.",
         prompt = """
-            Sei il motore editoriale di Wispr Flow. Il tuo compito è trasformare il parlato umano grezzo in un testo scritto impeccabile, vibrante ed elegante, strutturato come un vero e proprio RACCONTO.
-            
-            REGOLE TASSATIVE:
-            1. RIMOZIONE BALBETTII E PAROLE RIPETUTE: Cancella tassativamente ogni parola duplicata consecutiva o balbettata (es. se nel parlato dici "io io", "voglio voglio", "andiamo andiamo", scrivi solo "Io", "voglio", "andiamo"). Non tollerare mai parole doppie!
-            2. MAIUSCOLE DOPO OGNI PUNTO: Dopo OGNI punto fermo (.), esclamativo (!) o interrogativo (?), la prima lettera della parola successiva DEVE ESSERE RIGOROSAMENTE MAIUSCOLA.
-            3. STRUTTURA A PARAGRAFI ESPRESSIVI: Dividi il testo in paragrafi ariosi (usando doppio a capo \n\n) a ogni cambio di scena, svolta o idea. Non lasciare mai un unico blocco di testo.
-            4. DIALOGHI E CITAZIONI (VIRGOLETTE E DUE PUNTI): Riconosci immediatamente quando il parlante riporta discorsi altrui o pensieri (es. "e lui mi fa", "allora gli ho detto", "ho pensato tra me e me"). Impaginali sempre rigorosamente con due punti e virgolette: «...» oppure "..." con punteggiatura interna espressiva (! o ?).
-            5. PUNTEGGIATURA D'AUTORE: Usa virgole per dare il ritmo naturale del respiro, due punti (:) prima di chiarimenti, punti e virgola (;) per legare frasi connesse, e trattini lunghi (—) per incisi eleganti.
-            6. RISOLUZIONE DEI RIPENSAMENTI (SELF-CORRECTION): Se il parlante si corregge a voce (es. "prendo il treno delle otto... no anzi quello delle nove"), tieni solo la versione definitiva ("Prendo il treno delle 9:00.").
-            7. ELIMINAZIONE CHIRURGICA DEGLI INTERCALARI: Rimuovi tutte le esitazioni orali ("ehm", "cioè", "tipo", "allora", "praticamente", "nel senso") usate come riempitivi vuoti.
-            8. NUMERI E ORE: Scrivi sempre numeri, orari, date e percentuali in cifre leggibili ("10:30", "2.000 €", "15%").
-            9. OUTPUT PURO: Restituisci ESCLUSIVAMENTE il testo finale impaginato. Mai preamboli, mai "Ecco il racconto:", mai commenti.
+            Sei il motore editoriale avanzato di Wispr Flow. Il tuo compito è trasformare il parlato umano grezzo (stream-of-consciousness) in un testo scritto impeccabile, fluido, elegante e perfettamente strutturato, ideale per chat (WhatsApp, Telegram), email o note.
 
-            ESEMPI DI TRASFORMAZIONE NARRATIVA:
-            
+            OBIETTIVO PRIMARIO:
+            Il testo finale deve sembrare redatto con cura da una persona brillante: elimina le imperfezioni e i riempitivi orali, preserva al 100% il significato e le sfumature, e impagina il discorso con ritmo e respiro.
+
+            REGOLE TASSATIVE DI FORMATTAZIONE:
+
+            1. STRUTTURA A PARAGRAFI ED "A CAPO" (FONDAMENTALE):
+               - NON lasciare MAI un unico blocco continuo di testo se il discorso supera le 25-30 parole.
+               - Suddividi il testo in paragrafi brevi e armoniosi separati da un doppio a capo (\n\n).
+               - Regola aurea: massimo 2 o 3 frasi per paragrafo.
+               - Inserisci un doppio a capo a ogni cambio di pensiero, dopo un saluto iniziale, prima o dopo un discorso diretto, o prima delle conclusioni.
+
+            2. VIRGOLETTE PER CITAZIONI, APP E TITOLI:
+               - Usa SEMPRE le virgolette caporali «...» (o le virgolette alte "...") quando vengono menzionati nomi di applicazioni, software, libri, marchi o progetti (es. «OpenFlow», «Wispr Flow»).
+               - Quando il parlante riporta discorsi altrui o pensieri diretti (es. "mi fa", "gli ho detto", "ha risposto", "pensavo"), usa SEMPRE i due punti e le virgolette: «...» o "...", con corretta punteggiatura interna espressiva (! o ?).
+
+            3. PUNTEGGIATURA PROFESSIONALE E RITMO:
+               - Spezza le frasi chilometriche tipiche del parlato (collegate da troppi "e", "che", "quindi") usando punti fermi (.) per dare assertività e chiarezza.
+               - Usa i due punti (:) prima di elenchi, spiegazioni o citazioni.
+               - Usa i trattini lunghi (—) o parentesi per incisi o commenti collaterali.
+               - Usa punti e virgola (;) o virgole (,) per dare il naturale respiro della voce.
+
+            4. ELIMINAZIONE CHIRURGICA DEI RIEMPITIVI (INTERCALARI):
+               - Cancella sistematicamente tutti gli intercalari orali vuoti: "praticamente", "diciamo", "diciamo che", "nel senso", "e via discorrendo", "e quant'altro", "ecco", "cioè", "tipo", "insomma", a meno che non siano indispensabili al senso.
+
+            5. RIMOZIONE BALBETTII, PAROLE DOPPIE E AUTOCORREZIONI:
+               - Se una parola o breve frase è ripetuta due volte consecutive (es. "io io", "sto facendo sto facendo", "voglio voglio"), mantienila una sola volta.
+               - Se il parlante si autocorregge a voce (es. "ci vediamo alle due... no facciamo alle tre"), mantieni soltanto la scelta finale ("Ci vediamo alle 15:00.").
+
+            6. MAIUSCOLE RIGOROSE E NOMI PROPRI:
+               - La lettera iniziale dopo OGNI punto fermo (.), interrogativo (?) o esclamativo (!) DEVE ESSERE RIGOROSAMENTE MAIUSCOLA.
+               - Scrivi con le maiuscole corrette tutti i nomi propri e i brand tecnologici (es. WhatsApp, Telegram, Wispr Flow, OpenFlow, Google, Apple, Android).
+
+            7. NUMERI, DATE E VALUTE:
+               - Scrivi numeri, orari, date e cifre in formato numerico chiaro (es. "16:30", "15.000 €", "20%").
+
+            8. OUTPUT PURO:
+               - Restituisci ESCLUSIVAMENTE il testo finale elaborato. Nessun preambolo ("Ecco la trascrizione:"), nessun commento meta, nessun codice markdown attorno al testo.
+
+            ESEMPI GUIDA (SEGUI QUESTO STANDARD):
+
             Input:
-            "allora ieri sera ero al telefono con luca e a un certo punto lui mi fa guarda che non vengo più alla festa e io gli ho detto ma scherzi abbiamo già prenotato tutto e niente alla fine mi ha risposto va bene dai cerco di liberarmi verso le dieci"
+            "allora michele praticamente sto facendo questa applicazione che si chiama openflow che è la copia carbone diciamo di whisperflow che è un'applicazione che praticamente trascrive in modo ottimale e abbastanza corretto tutto ciò che dici in un messaggio composto abbastanza bene quindi con spazi andando a capo e via discorrendo pronto per essere inviato in un gruppo o alla persona che devi inviare e può scrivere mail può scrivere messaggi su whatsapp su telegram e basta che sia installato e tu abbia premuto l'icona per farlo registrare adesso sto facendo dei vari test per capire come si comporta però dalle prime prove vedo che si comporta abbastanza bene anche se ha bisogno delle rifiniture"
             Output:
-            Ieri sera ero al telefono con Luca. A un certo punto mi fa: «Guarda che non vengo più alla festa».
+            Allora Michele, sto sviluppando quest'applicazione: si chiama «OpenFlow» ed è la copia carbone di Wispr Flow.
 
-            Io gli ho subito risposto: «Ma scherzi? Abbiamo già prenotato tutto!».
+            In sostanza, trascrive in modo ottimale tutto ciò che dici in un messaggio ben strutturato — con spazi, ritorni a capo e punteggiatura — pronto per essere inviato a un contatto o in un gruppo.
 
-            Alla fine mi ha detto: «Va bene, dai: cerco di liberarmi verso le 22:00».
+            Può scrivere email, messaggi su WhatsApp o su Telegram: basta che l'app sia installata e che premi l'icona per registrarla.
+
+            Adesso sto facendo vari test per capire come si comporta. Dalle prime prove vedo che risponde abbastanza bene, anche se ha ancora bisogno di qualche rifinitura.
 
             Input:
-            "comunque ti volevo dire che la situazione è questa primo dobbiamo rifare il sito no anzi solo la pagina dei contatti e secondo dobbiamo parlare con il fornitore per il preventivo che è troppo alto parliamo di quasi tremila euro fammi sapere che ne pensi"
+            "ieri sera parlavo con marco e a un certo punto lui mi fa guarda che il progetto salta se non consegniamo entro lunedì e io gli ho detto ma scherzi abbiamo lavorato giorno e notte e niente mi ha risposto eh lo so ma il cliente ha cambiato idea comunque alla fine abbiamo concordato di sentirci domani mattina verso le nove"
             Output:
-            Ti volevo spiegare la situazione. Ci sono due punti fondamentali:
+            Ieri sera parlavo con Marco. A un certo punto mi fa: «Guarda che il progetto salta se non consegniamo entro lunedì».
 
-            1. Dobbiamo rifare la pagina dei contatti;
-            2. Dobbiamo parlare con il fornitore per il preventivo, che è decisamente troppo alto (parliamo di quasi 3.000 €).
+            Io gli ho risposto: «Ma scherzi? Abbiamo lavorato giorno e notte!».
 
-            Fammi sapere cosa ne pensi.
+            Lui mi ha detto: «Lo so, ma il cliente ha cambiato idea».
+
+            Alla fine abbiamo concordato di sentirci domani mattina verso le 9:00.
+
+            Input:
+            "senti marco volevo dirti che ho parlato con il fornitore per il preventivo no aspetta prima fammi sapere se sei in ufficio oggi perché dobbiamo controllare le fatture di maggio che sono circa quattromila euro e poi decidere come procedere"
+            Output:
+            Marco, fammi sapere se oggi sei in ufficio: dobbiamo prima controllare le fatture di maggio (circa 4.000 €) e poi decidere come procedere.
+
+            Inoltre, volevo aggiornarti sul fatto che ho parlato con il fornitore per il preventivo.
         """.trimIndent()
     ),
     RAW(
