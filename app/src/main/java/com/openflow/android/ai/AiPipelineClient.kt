@@ -45,8 +45,13 @@ class AiPipelineClient(private val prefs: PreferencesManager) {
             val geminiResult = processGeminiMultimodalAudio(audioFile, apiKey)
             return@withContext if (geminiResult.isSuccess) {
                 val polished = geminiResult.getOrThrow()
-                Log.d(TAG, "GEMINI SUCCESS: ${polished.length} caratteri")
-                Result.success(PipelineOutput(text = sanitizeAndFormatText(polished), isFallback = false))
+                if (isSilenceOrHallucination(polished)) {
+                    Log.i(TAG, "Gemini ha rilevato silenzio o allucinazione: '$polished'. Output soppresso.")
+                    Result.success(PipelineOutput(text = "", isFallback = false))
+                } else {
+                    Log.d(TAG, "GEMINI SUCCESS: ${polished.length} caratteri")
+                    Result.success(PipelineOutput(text = sanitizeAndFormatText(polished), isFallback = false))
+                }
             } else {
                 val err = geminiResult.exceptionOrNull()?.message ?: "Errore sconosciuto Gemini"
                 Log.e(TAG, "Gemini fallito: $err")
@@ -63,7 +68,9 @@ class AiPipelineClient(private val prefs: PreferencesManager) {
         val rawTranscription = transcribeAudio(audioFile, apiKey, provider)
             .getOrElse { return@withContext Result.failure(it) }
 
-        if (rawTranscription.isBlank()) {
+        // SCUDO 2: Filtro anti-allucinazione post-Whisper su trascrizione grezza
+        if (rawTranscription.isBlank() || isSilenceOrHallucination(rawTranscription)) {
+            Log.i(TAG, "Whisper ha restituito silenzio o allucinazione: '$rawTranscription'. Output soppresso.")
             return@withContext Result.success(PipelineOutput(text = ""))
         }
 
@@ -80,16 +87,25 @@ class AiPipelineClient(private val prefs: PreferencesManager) {
 
         val finalOutput = if (llmResult.isSuccess) {
             val polished = llmResult.getOrThrow()
-            Log.d(TAG, "POLISHED LLM: ${polished.length} caratteri")
-            PipelineOutput(text = sanitizeAndFormatText(polished), isFallback = false)
+            if (isSilenceOrHallucination(polished)) {
+                Log.i(TAG, "LLM ha rilevato silenzio o allucinazione: '$polished'. Output soppresso.")
+                PipelineOutput(text = "", isFallback = false)
+            } else {
+                Log.d(TAG, "POLISHED LLM: ${polished.length} caratteri")
+                PipelineOutput(text = sanitizeAndFormatText(polished), isFallback = false)
+            }
         } else {
             val err = llmResult.exceptionOrNull()?.message ?: "Errore sconosciuto"
             Log.e(TAG, "LLM FALLITO: $err. Uso fallback Whisper grezzo.", llmResult.exceptionOrNull())
-            PipelineOutput(
-                text = sanitizeAndFormatText(rawTranscription),
-                isFallback = true,
-                errorMessage = err
-            )
+            if (isSilenceOrHallucination(rawTranscription)) {
+                PipelineOutput(text = "", isFallback = true, errorMessage = err)
+            } else {
+                PipelineOutput(
+                    text = sanitizeAndFormatText(rawTranscription),
+                    isFallback = true,
+                    errorMessage = err
+                )
+            }
         }
 
         Result.success(finalOutput)
@@ -136,7 +152,7 @@ class AiPipelineClient(private val prefs: PreferencesManager) {
                         put("role", "user")
                         put("parts", JSONArray().apply {
                             put(JSONObject().apply {
-                                put("text", "Trascrivi e formatta il parlato contenuto in questa registrazione secondo le istruzioni del sistema: applica logica e correzione attiva (correggi refusi fonetici, modelli hardware come CPU/GPU, e lapsus sintattici). Suddividi il testo per argomenti in paragrafi logici separati da riga vuota, mantieni la voce viva dell'utente con punteggiatura espressiva, e NON usare MAI virgolette caporali «...». Restituisci ESCLUSIVAMENTE il testo finale pulito pronto da inviare.")
+                                put("text", "Trascrivi e formatta il parlato contenuto in questa registrazione secondo le istruzioni del sistema: applica logica e correzione attiva (correggi refusi fonetici, modelli hardware come CPU/GPU, e lapsus sintattici). Suddividi il testo per argomenti in paragrafi logici separati da riga vuota, mantieni la voce viva dell'utente con punteggiatura espressiva, e NON usare MAI virgolette caporali «...». Se nella registrazione non c'è parlato umano comprensibile o si sente solo rumore di fondo o silenzio, restituisci ESCLUSIVAMENTE una stringa vuota. Restituisci ESCLUSIVAMENTE il testo finale pulito pronto da inviare.")
                             })
                             put(JSONObject().apply {
                                 put("inline_data", JSONObject().apply {
@@ -417,10 +433,12 @@ class AiPipelineClient(private val prefs: PreferencesManager) {
     ): Result<String> {
         val preset = prefs.activePreset
         val vocab = prefs.customVocabulary
+        val antiSilenceRule = "\n\n6. REGOLA CRITICA SILENZIO/ALLUCINAZIONI:\nSe l'input fornito dall'utente è vuoto, incomprensibile o corrisponde a una tipica allucinazione da rumore o sottotitolo (es. 'Grazie per la visione', 'Sottotitoli a cura di', 'Iscriviti al canale', '[Musica]' o punteggiatura isolata), devi restituire ESCLUSIVAMENTE una stringa vuota senza inventare alcun testo."
+        val baseInstruction = "${preset.prompt}$antiSilenceRule"
         val systemInstruction = if (vocab.isNotBlank()) {
-            "${preset.prompt}\n\nGLOSSARIO E TERMINI PERSONALIZZATI (preserva e usa sempre l'ortografia esatta di questi nomi/termini):\n$vocab"
+            "$baseInstruction\n\nGLOSSARIO E TERMINI PERSONALIZZATI (preserva e usa sempre l'ortografia esatta di questi nomi/termini):\n$vocab"
         } else {
-            preset.prompt
+            baseInstruction
         }
 
         val messagesArray = JSONArray().apply {
@@ -498,9 +516,73 @@ class AiPipelineClient(private val prefs: PreferencesManager) {
             "openai/gpt-oss-20b",
             "qwen/qwen3.8-27b",
             "qwen/qwen3.6-27b",
-            "llama-3.3-70b-versatile",
-            "llama-3.1-8b-instant"
+            "llama-3.1-8b-instant",
+            "llama-3.3-70b-versatile"
         )
+
+        private val HALLUCINATION_EXACT_PHRASES = setOf(
+            "grazie per la visione",
+            "grazie della visione",
+            "grazie mille per la visione",
+            "grazie a tutti per la visione",
+            "grazie per aver guardato",
+            "grazie per aver guardato questo video",
+            "grazie a tutti",
+            "iscriviti al canale",
+            "iscriviti e attiva la campanella",
+            "iscriviti e lascia un like",
+            "non dimenticare di iscriverti",
+            "amara org",
+            "thank you for watching",
+            "thanks for watching",
+            "please subscribe",
+            "like and subscribe",
+            "ciao",
+            "buona visione"
+        )
+
+        private val HALLUCINATION_PREFIXES = listOf(
+            "sottotitoli a cura di",
+            "sottotitoli creati da",
+            "sottotitoli realizzati da",
+            "sottotitoli e revisione a cura di",
+            "traduzione e sottotitoli",
+            "sottotitoli di",
+            "subtitles by",
+            "captioned by"
+        )
+
+        /**
+         * SCUDO 2: Rilevamento chirurgico di silenzio o allucinazioni Whisper/LLM.
+         * Riconosce token spuri da training set YouTube, marcatori audio isolati ([Musica])
+         * o punteggiatura spuria senza testo reale.
+         */
+        fun isSilenceOrHallucination(text: String): Boolean {
+            val trimmed = text.trim()
+            if (trimmed.isBlank()) return true
+
+            // Solo punteggiatura o simboli
+            val withoutPunct = trimmed.replace(Regex("""[\p{Punct}\s…«»""''’“”\u200B-\u200D\uFEFF]"""), "")
+            if (withoutPunct.isBlank()) return true
+
+            // Marcatori sonori isolati tra parentesi, es: [Musica], (Risate), [Silenzio]
+            val bracketPattern = Regex("""^[\(\[]\s*(musica|musica di sottofondo|applausi|risate|silenzio|music|applause|laughter|silence|audio|rumore)\s*[\)\]][.!?,]*$""", RegexOption.IGNORE_CASE)
+            if (bracketPattern.matches(trimmed)) return true
+
+            val normalized = trimmed.lowercase()
+                .replace(Regex("""[^\p{L}\p{Nd}\s]"""), " ")
+                .replace(Regex("""\s+"""), " ")
+                .trim()
+
+            if (normalized in HALLUCINATION_EXACT_PHRASES) return true
+            if (normalized.contains("amara org")) return true
+
+            for (prefix in HALLUCINATION_PREFIXES) {
+                if (normalized.startsWith(prefix)) return true
+            }
+
+            return false
+        }
 
         /**
          * Sanitizzazione deterministica e Garanzia di Qualità Tipografica (Wispr Engine):
@@ -514,6 +596,9 @@ class AiPipelineClient(private val prefs: PreferencesManager) {
          */
         fun sanitizeAndFormatText(output: String): String {
             var clean = output.trim()
+            if (clean.isBlank() || isSilenceOrHallucination(clean)) {
+                return ""
+            }
 
             // 1. Rimuove prefissi spuri
             // "Broadcast" è un'allucinazione di Whisper; \b evita di tagliare parole vere come "Broadcasting"

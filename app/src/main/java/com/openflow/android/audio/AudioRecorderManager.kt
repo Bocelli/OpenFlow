@@ -15,10 +15,16 @@ class AudioRecorderManager(private val context: Context) {
     var isRecording: Boolean = false
         private set
 
+    private var peakAmplitudeInSession: Int = 0
+    private var recordingStartTimeMs: Long = 0L
+
     fun startRecording(): Result<File> {
         if (isRecording) {
             stopRecording()
         }
+
+        peakAmplitudeInSession = 0
+        recordingStartTimeMs = System.currentTimeMillis()
 
         // Acquisisce un WakeLock parziale per garantire che la CPU non venga sospesa
         // durante la cattura del flusso vocale (particolarmente critico su Samsung, OnePlus, Vivo).
@@ -72,7 +78,11 @@ class AudioRecorderManager(private val context: Context) {
 
     fun getMaxAmplitude(): Int {
         return try {
-            if (isRecording) mediaRecorder?.maxAmplitude ?: 0 else 0
+            val amp = if (isRecording) mediaRecorder?.maxAmplitude ?: 0 else 0
+            if (amp > peakAmplitudeInSession) {
+                peakAmplitudeInSession = amp
+            }
+            amp
         } catch (_: Exception) {
             0
         }
@@ -81,6 +91,10 @@ class AudioRecorderManager(private val context: Context) {
     fun stopRecording(): File? {
         if (!isRecording) return null
         return try {
+            val finalAmp = try { mediaRecorder?.maxAmplitude ?: 0 } catch (_: Exception) { 0 }
+            if (finalAmp > peakAmplitudeInSession) {
+                peakAmplitudeInSession = finalAmp
+            }
             mediaRecorder?.apply {
                 stop()
                 release()
@@ -94,6 +108,19 @@ class AudioRecorderManager(private val context: Context) {
             cleanup()
             null
         }
+    }
+
+    /**
+     * Valuta se durante la sessione è stata rilevata una reale attività vocale.
+     * Esclude registrazioni vuote (silenzio, colpi accidentali o solo ronzio di fondo).
+     * Sotto i 900 di ampiezza con MediaRecorder Voice Recognition si ha solo rumore termico/ambiente.
+     */
+    fun hasDetectedVoiceActivity(): Boolean {
+        val durationMs = if (recordingStartTimeMs > 0) System.currentTimeMillis() - recordingStartTimeMs else 0L
+        if (durationMs < 350L && peakAmplitudeInSession < 1500) {
+            return false
+        }
+        return peakAmplitudeInSession >= MIN_VOICE_AMPLITUDE_THRESHOLD
     }
 
     fun cancelRecording() {
@@ -116,6 +143,8 @@ class AudioRecorderManager(private val context: Context) {
         releaseWakeLock()
         currentOutputFile?.delete()
         currentOutputFile = null
+        peakAmplitudeInSession = 0
+        recordingStartTimeMs = 0L
     }
 
     private fun releaseWakeLock() {
@@ -129,5 +158,6 @@ class AudioRecorderManager(private val context: Context) {
 
     companion object {
         private const val TAG = "AudioRecorderManager"
+        private const val MIN_VOICE_AMPLITUDE_THRESHOLD = 900
     }
 }

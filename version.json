@@ -1,7 +1,7 @@
 {
-  "versionCode": 2,
-  "versionName": "1.0.2",
-  "releaseNotes": "• Bordo fotocamera colorato dinamico per ogni modo di parlare (Verde Wispr, Azzurro RAW, Viola PRO, Indaco PROMPT, Ambra LIST)\n• In-App Updater integrato collegato a GitHub con verifica e download 1-tap\n• Logica contestuale e correzione attiva dei refusi vocali\n• Suddivisione automatica del parlato in paragrafi argomentativi",
+  "versionCode": 3,
+  "versionName": "1.0.3",
+  "releaseNotes": "• Protezione a Triplo Scudo contro silenzio e allucinazioni Whisper/LLM (VAD Hardware + Regex Filter + Guardrail)\n• Correzione dell'errore di modello su Groq con fallback automatico a llama-3.1-8b-instant\n• Bordo fotocamera colorato dinamico per ogni modo di parlare (Verde Wispr, Azzurro RAW, Viola PRO, Indaco PROMPT, Ambra LIST)\n• In-App Updater integrato collegato a GitHub con verifica e download 1-tap\n• Logica contestuale e correzione attiva dei refusi vocali",
   "downloadUrl": "https://raw.githubusercontent.com/Bocelli/OpenFlow/main/releases/OpenFlow-Release-C-NotchDocked.apk",
   "publishedAt": "2026-11-04"
 }

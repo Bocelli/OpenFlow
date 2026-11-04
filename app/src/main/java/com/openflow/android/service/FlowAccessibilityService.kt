@@ -344,9 +344,19 @@ class FlowAccessibilityService : AccessibilityService() {
 
     private fun handleStopRecording() {
         stopAudioRecordService()
+        val hasVoice = audioRecorder.hasDetectedVoiceActivity()
         val recordedFile = audioRecorder.stopRecording()
         if (recordedFile == null || !recordedFile.exists()) {
             bubbleOverlay?.updateState(BubbleState.ERROR)
+            return
+        }
+
+        // SCUDO 1: Se l'audio e silenzio assoluto o rumore di fondo senza voce (< soglia VAD),
+        // chiudiamo immediatamente senza chiamare le API, evitando allucinazioni e consumo token.
+        if (!hasVoice) {
+            Log.i(TAG, "Nessuna attivita vocale rilevata (silenzio/rumore sotto soglia). Ripristino IDLE.")
+            try { recordedFile.delete() } catch (_: Exception) {}
+            bubbleOverlay?.updateState(BubbleState.IDLE)
             return
         }
 

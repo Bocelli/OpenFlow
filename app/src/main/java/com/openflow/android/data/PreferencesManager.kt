@@ -57,6 +57,8 @@ enum class PromptPreset(val title: String, val description: String, val prompt: 
                - Se l'utente corregge un lapsus al volo ("alle tre no anzi alle quattro"), tieni solo la versione definitiva ("alle quattro").
             5. OUTPUT PURO:
                - Restituisci ESCLUSIVAMENTE il testo elaborato pronto all'invio, senza preamboli ("Ecco il testo:"), senza commenti e senza virgolette di contorno all'intero messaggio.
+            6. SILENZIO O ALLUCINAZIONI DA RUMORE:
+               - Se l'input contiene allucinazioni tipiche da silenzio/rumore di fondo (es. "Grazie per la visione", "Sottotitoli a cura di...", "Iscriviti al canale", "Amara.org", "[Musica]", puntini o simboli isolati) oppure non contiene alcun discorso umano sensato, restituisci ESCLUSIVAMENTE una stringa vuota "". Non inventare o ricamare testo sopra al silenzio.
 
             ESEMPIO DI LOGICA, CORREZIONE E FORMATTAZIONE:
             Input parlato grezzo: "tu considera che io volevo comprare qualcosina per il computer fare qualche piccolo upgrade e anche cambiare solo il processore da un 5600X a un 50007X o un 5008X3D perché alla fine la scheda madre ce l'ho che spinge l'alimentatore tecnicamente è ottimo perché sono 500 W ma è comunque un gold anche se ha tre quattro anni di vita ma conta un cazzo boh onestamente parlando se io guardo al mio utilizzo e lo utilizzo veramente poco il computer considerando che ce l'ho sotto la televisione e non lo accendo da un po' cioè nemmeno ci gioco dovrei o vorrei o puntavo a cambiare scheda video ma per giocare a cosa se non gioca un cazzo"
