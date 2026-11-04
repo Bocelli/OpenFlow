@@ -126,6 +126,36 @@ class AiPipelineClient(private val prefs: PreferencesManager) {
         apiKey: String,
         provider: com.openflow.android.data.ApiProvider
     ): Result<String> {
+        // 1. Tentativo Primario (es. Llama 3.3 70B Versatile su Groq o GPT-4o-mini su OpenAI)
+        val primaryResult = executeLlmCall(rawText, contextText, apiKey, provider.baseUrl, provider.llmModel)
+        if (primaryResult.isSuccess) {
+            return primaryResult
+        }
+
+        val primaryError = primaryResult.exceptionOrNull()?.message ?: "Errore sconosciuto"
+        Log.w(TAG, "Tentativo primario fallito con ${provider.llmModel}: $primaryError")
+
+        // 2. Fallback Istantaneo per Groq: se 70B fallisce per rate limit (HTTP 429) o timeout,
+        // ritenta immediatamente con Llama 3.1 8B Instant (30.000 TPM, throughput ultra-veloce, zero 429)
+        if (provider == com.openflow.android.data.ApiProvider.GROQ && provider.llmModel != "llama-3.1-8b-instant") {
+            Log.i(TAG, "Eseguo fallback istantaneo su Groq 'llama-3.1-8b-instant'...")
+            val fallbackResult = executeLlmCall(rawText, contextText, apiKey, provider.baseUrl, "llama-3.1-8b-instant")
+            if (fallbackResult.isSuccess) {
+                Log.i(TAG, "Fallback Groq 8B riuscito con successo!")
+                return fallbackResult
+            }
+        }
+
+        return primaryResult
+    }
+
+    private fun executeLlmCall(
+        rawText: String,
+        contextText: String?,
+        apiKey: String,
+        baseUrl: String,
+        modelName: String
+    ): Result<String> {
         val preset = prefs.activePreset
         var systemInstruction = preset.prompt
         if (!contextText.isNullOrBlank()) {
@@ -144,17 +174,17 @@ class AiPipelineClient(private val prefs: PreferencesManager) {
         }
 
         val requestPayload = JSONObject().apply {
-            put("model", provider.llmModel)
+            put("model", modelName)
             put("messages", messagesArray)
-            put("temperature", 0.3) // 0.3: equilibrio ideale tra eleganza formattazione e fedeltà all'intento
-            put("max_tokens", 2048)
+            put("temperature", 0.3)
+            put("max_tokens", 800) // 800 token riducono la riserva TPM del 60%, azzerando il rischio di HTTP 429 su Groq
         }
 
         val jsonMediaType = "application/json; charset=utf-8".toMediaType()
         val body = requestPayload.toString().toRequestBody(jsonMediaType)
 
         val request = Request.Builder()
-            .url("${provider.baseUrl}/chat/completions")
+            .url("$baseUrl/chat/completions")
             .addHeader("Authorization", "Bearer $apiKey")
             .post(body)
             .build()

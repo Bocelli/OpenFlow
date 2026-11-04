@@ -30,6 +30,11 @@
     - Removed forbidden `startService` call on AccessibilityService in MainActivity to prevent SecurityExceptions.
     - Added Lifecycle `ON_RESUME` re-check to instantly refresh permissions and restore the bubble when returning from Android settings.
     - Defaulted `showOnlyWhenFocused` to false so the bubble is persistently available on screen.
+  - Eliminated Groq Rate Limit (HTTP 429) & Silent Fallback:
+    - Reduced `max_tokens` from 2048 to 800, cutting TPM reservation by 60%.
+    - Added automatic instant fallback to `llama-3.1-8b-instant` (30,000 TPM, <100ms) on Groq if 70B fails or is rate-limited.
+    - Added high-priority Android Notification alerts so API or LLM errors are never silenced by background Toast restrictions.
+    - Streamlined prompt tokens to ~450 with canonical few-shot based on real-world dictation ("MicFlow").
   - Compiled and verified debug APK: `OpenFlow-debug.apk` (16.4 MB) ready for deployment.
   - Implemented core Android architecture:
     - `data/PreferencesManager.kt`: EncryptedSharedPreferences, OpenAI & Groq endpoints, prompt presets.

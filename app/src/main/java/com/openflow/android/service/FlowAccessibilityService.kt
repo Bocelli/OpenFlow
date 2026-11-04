@@ -156,10 +156,11 @@ class FlowAccessibilityService : AccessibilityService() {
 
             response.onSuccess { output ->
                 if (output.isFallback && output.errorMessage != null) {
+                    showNotificationAlert("⚠️ OpenFlow: Fallback Trascrizione Grezza", output.errorMessage)
                     mainHandler.post {
                         android.widget.Toast.makeText(
                             applicationContext,
-                            "⚠️ Fallito LLM (${output.errorMessage}): mostro testo grezzo",
+                            "⚠️ Fallito LLM: ${output.errorMessage}",
                             android.widget.Toast.LENGTH_LONG
                         ).show()
                     }
@@ -172,6 +173,7 @@ class FlowAccessibilityService : AccessibilityService() {
                 }
             }.onFailure { error ->
                 Log.e(TAG, "Errore AI Pipeline: ${error.message}", error)
+                showNotificationAlert("❌ OpenFlow: Errore Registrazione/AI", error.message ?: "Errore sconosciuto")
                 bubbleOverlay?.updateState(BubbleState.ERROR)
             }
         }
@@ -238,6 +240,25 @@ class FlowAccessibilityService : AccessibilityService() {
         }
 
         return text
+    }
+
+    private fun showNotificationAlert(title: String, message: String) {
+        try {
+            val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
+            val channelId = "openflow_status_channel"
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                val channel = android.app.NotificationChannel(channelId, "Stato OpenFlow", android.app.NotificationManager.IMPORTANCE_HIGH)
+                notificationManager.createNotificationChannel(channel)
+            }
+            val notif = androidx.core.app.NotificationCompat.Builder(this, channelId)
+                .setSmallIcon(android.R.drawable.stat_notify_error)
+                .setContentTitle(title)
+                .setContentText(message)
+                .setPriority(androidx.core.app.NotificationCompat.PRIORITY_HIGH)
+                .setAutoCancel(true)
+                .build()
+            notificationManager.notify(2002, notif)
+        } catch (_: Exception) {}
     }
 
     private fun copyToClipboard(text: String) {

@@ -25,61 +25,44 @@ enum class PromptPreset(val title: String, val description: String, val prompt: 
         title = "Wispr God-Tier (Formattazione Intelligente)",
         description = "Paragrafi ariosi, virgolette per citazioni/app, punteggiatura d'autore e rimozione intercalari.",
         prompt = """
-            Sei il motore editoriale avanzato di Wispr Flow. Il tuo compito è trasformare il parlato umano grezzo (stream-of-consciousness) in un testo scritto impeccabile, fluido, elegante e perfettamente strutturato, ideale per chat (WhatsApp, Telegram), email o note.
+            Sei il motore editoriale avanzato di Wispr Flow. Riscrivi il parlato spontaneo in un testo scritto in italiano impeccabile, naturale e perfettamente strutturato.
 
-            OBIETTIVO PRIMARIO:
-            Il testo finale deve sembrare redatto con cura da una persona brillante: elimina le imperfezioni e i riempitivi orali, preserva al 100% il significato e le sfumature, e impagina il discorso con ritmo e respiro.
-
-            REGOLE TASSATIVE DI FORMATTAZIONE:
-
-            1. STRUTTURA A PARAGRAFI ED "A CAPO" (FONDAMENTALE):
-               - NON lasciare MAI un unico blocco continuo di testo se il discorso supera le 25-30 parole.
-               - Suddividi il testo in paragrafi brevi e armoniosi separati da un doppio a capo (\n\n).
-               - Regola aurea: massimo 2 o 3 frasi per paragrafo.
-               - Inserisci un doppio a capo a ogni cambio di pensiero, dopo un saluto iniziale, prima o dopo un discorso diretto, o prima delle conclusioni.
-
-            2. VIRGOLETTE PER CITAZIONI, APP E TITOLI:
-               - Usa SEMPRE le virgolette caporali «...» (o le virgolette alte "...") quando vengono menzionati nomi di applicazioni, software, libri, marchi o progetti (es. «OpenFlow», «Wispr Flow»).
-               - Quando il parlante riporta discorsi altrui o pensieri diretti (es. "mi fa", "gli ho detto", "ha risposto", "pensavo"), usa SEMPRE i due punti e le virgolette: «...» o "...", con corretta punteggiatura interna espressiva (! o ?).
-
-            3. PUNTEGGIATURA PROFESSIONALE E RITMO:
-               - Spezza le frasi chilometriche tipiche del parlato (collegate da troppi "e", "che", "quindi") usando punti fermi (.) per dare assertività e chiarezza.
-               - Usa i due punti (:) prima di elenchi, spiegazioni o citazioni.
-               - Usa i trattini lunghi (—) o parentesi per incisi o commenti collaterali.
-               - Usa punti e virgola (;) o virgole (,) per dare il naturale respiro della voce.
-
+            REGOLE TASSATIVE:
+            1. STRUTTURA A PARAGRAFI ED "A CAPO":
+               - Dividi il testo in paragrafi brevi (massimo 2-3 frasi) separati da un doppio a capo (\n\n).
+               - NON lasciare MAI un unico blocco continuo di testo se supera le 25 parole.
+            2. VIRGOLETTE CAPORALI E CITAZIONI:
+               - Usa SEMPRE le virgolette caporali «...» (o le virgolette alte "...") per nomi di applicazioni, software, progetti o citazioni dirette (es. «MicFlow», «Wispr Flow»).
+            3. PUNTEGGIATURA E RITMO:
+               - Spezza le frasi lunghe tipiche del parlato usando punti fermi (.).
+               - Usa i due punti (:) prima di elenchi o spiegazioni, trattini lunghi (—) per incisi, e virgole per il ritmo naturale.
             4. ELIMINAZIONE CHIRURGICA DEI RIEMPITIVI (INTERCALARI):
-               - Cancella sistematicamente tutti gli intercalari orali vuoti: "praticamente", "diciamo", "diciamo che", "nel senso", "e via discorrendo", "e quant'altro", "ecco", "cioè", "tipo", "insomma", a meno che non siano indispensabili al senso.
-
-            5. RIMOZIONE BALBETTII, PAROLE DOPPIE E AUTOCORREZIONI:
-               - Se una parola o breve frase è ripetuta due volte consecutive (es. "io io", "sto facendo sto facendo", "voglio voglio"), mantienila una sola volta.
-               - Se il parlante si autocorregge a voce (es. "ci vediamo alle due... no facciamo alle tre"), mantieni soltanto la scelta finale ("Ci vediamo alle 15:00.").
-
-            6. MAIUSCOLE RIGOROSE E NOMI PROPRI:
-               - La lettera iniziale dopo OGNI punto fermo (.), interrogativo (?) o esclamativo (!) DEVE ESSERE RIGOROSAMENTE MAIUSCOLA.
-               - Scrivi con le maiuscole corrette tutti i nomi propri e i brand tecnologici (es. WhatsApp, Telegram, Wispr Flow, OpenFlow, Google, Apple, Android).
-
-            7. NUMERI, DATE E VALUTE:
-               - Scrivi numeri, orari, date e cifre in formato numerico chiaro (es. "16:30", "15.000 €", "20%").
-
+               - Cancella rigorosamente tutti gli intercalari orali: "praticamente", "diciamo", "diciamo che", "nel senso", "e via discorrendo", "e quant'altro", "cioè", "tipo", "insomma".
+            5. BALBETTII E PAROLE RIPETUTE:
+               - Se una parola è ripetuta due volte ("sto sto", "prova prova"), mantienila una sola volta.
+            6. MAIUSCOLE E BRAND:
+               - Maiuscola obbligatoria dopo ogni punto (. ! ?).
+               - Scrivi correttamente tutti i brand (WhatsApp, Telegram, MicFlow, Wispr Flow, Google, Android).
+            7. FEDELTÀ ASSOLUTA:
+               - Mantieni inalterato ogni dato, informazione, nome e significato.
             8. OUTPUT PURO:
-               - Restituisci ESCLUSIVAMENTE il testo finale elaborato. Nessun preambolo ("Ecco la trascrizione:"), nessun commento meta, nessun codice markdown attorno al testo.
+               - Restituisci ESCLUSIVAMENTE il testo finale elaborato, senza prefazioni o commenti.
 
-            ESEMPI GUIDA (SEGUI QUESTO STANDARD):
+            ESEMPI GUIDA:
 
             Input:
-            "allora michele praticamente sto facendo questa applicazione che si chiama openflow che è la copia carbone diciamo di whisperflow che è un'applicazione che praticamente trascrive in modo ottimale e abbastanza corretto tutto ciò che dici in un messaggio composto abbastanza bene quindi con spazi andando a capo e via discorrendo pronto per essere inviato in un gruppo o alla persona che devi inviare e può scrivere mail può scrivere messaggi su whatsapp su telegram e basta che sia installato e tu abbia premuto l'icona per farlo registrare adesso sto facendo dei vari test per capire come si comporta però dalle prime prove vedo che si comporta abbastanza bene anche se ha bisogno delle rifiniture"
+            "allora michele praticamente sto creando questa applicazione che si chiama micflow che è praticamente la copia carbone di whisperflow cosa fa lei analizza il testo che tu dici cioè le parole che tu dici premendo il pulsante e le trascrive in modo ottimale quindi aggiungendo punteggiatura aggiungendo spazi andando a capo e via discorrendo quindi creando uno schema perfetto del messaggio pronto ad essere mandato che sia su telegram su whatsapp via mail e via discorrendo ha tante altre funzioni come la predisposizione alla trascrizione dei prompt quella che sto usando io la trascrizione questa racconto così come quella sparata a zero dell'llm che praticamente tutto quello che dici trascrive quindi per me può essere fantastica questa applicazione vediamo come va"
             Output:
-            Allora Michele, sto sviluppando quest'applicazione: si chiama «OpenFlow» ed è la copia carbone di Wispr Flow.
+            Allora Michele, sto creando quest'applicazione: si chiama «MicFlow» ed è la copia carbone di Wispr Flow.
 
-            In sostanza, trascrive in modo ottimale tutto ciò che dici in un messaggio ben strutturato — con spazi, ritorni a capo e punteggiatura — pronto per essere inviato a un contatto o in un gruppo.
+            Cosa fa? Analizza le parole che pronunci premendo il pulsante e le trascrive in modo ottimale: inserisce la punteggiatura corretta, gestisce gli spazi e va a capo da sola, creando una struttura perfetta pronta per essere inviata su Telegram, WhatsApp o via email.
 
-            Può scrivere email, messaggi su WhatsApp o su Telegram: basta che l'app sia installata e che premi l'icona per registrarla.
+            Ha anche diverse altre funzioni, tra cui la trascrizione ottimizzata per prompt IA, la modalità racconto e la trascrizione pura senza filtri.
 
-            Adesso sto facendo vari test per capire come si comporta. Dalle prime prove vedo che risponde abbastanza bene, anche se ha ancora bisogno di qualche rifinitura.
+            Secondo me può essere un'applicazione fantastica. Vediamo come va!
 
             Input:
-            "ieri sera parlavo con marco e a un certo punto lui mi fa guarda che il progetto salta se non consegniamo entro lunedì e io gli ho detto ma scherzi abbiamo lavorato giorno e notte e niente mi ha risposto eh lo so ma il cliente ha cambiato idea comunque alla fine abbiamo concordato di sentirci domani mattina verso le nove"
+            "allora ieri sera parlavo con marco e a un certo punto lui mi fa guarda che il progetto salta se non consegniamo entro lunedì e io gli ho detto ma scherzi abbiamo lavorato giorno e notte e niente mi ha risposto eh lo so ma il cliente ha cambiato idea comunque alla fine abbiamo concordato di sentirci domani mattina verso le nove"
             Output:
             Ieri sera parlavo con Marco. A un certo punto mi fa: «Guarda che il progetto salta se non consegniamo entro lunedì».
 
@@ -88,13 +71,6 @@ enum class PromptPreset(val title: String, val description: String, val prompt: 
             Lui mi ha detto: «Lo so, ma il cliente ha cambiato idea».
 
             Alla fine abbiamo concordato di sentirci domani mattina verso le 9:00.
-
-            Input:
-            "senti marco volevo dirti che ho parlato con il fornitore per il preventivo no aspetta prima fammi sapere se sei in ufficio oggi perché dobbiamo controllare le fatture di maggio che sono circa quattromila euro e poi decidere come procedere"
-            Output:
-            Marco, fammi sapere se oggi sei in ufficio: dobbiamo prima controllare le fatture di maggio (circa 4.000 €) e poi decidere come procedere.
-
-            Inoltre, volevo aggiornarti sul fatto che ho parlato con il fornitore per il preventivo.
         """.trimIndent()
     ),
     RAW(
@@ -167,8 +143,8 @@ class PreferencesManager(context: Context) {
 
     var activeProvider: ApiProvider
         get() {
-            val name = prefs.getString(KEY_ACTIVE_PROVIDER, ApiProvider.OPENAI.name)
-            return try { ApiProvider.valueOf(name!!) } catch (_: Exception) { ApiProvider.OPENAI }
+            val name = prefs.getString(KEY_ACTIVE_PROVIDER, ApiProvider.GROQ.name)
+            return try { ApiProvider.valueOf(name!!) } catch (_: Exception) { ApiProvider.GROQ }
         }
         set(value) = prefs.edit().putString(KEY_ACTIVE_PROVIDER, value.name).apply()
 
