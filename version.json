@@ -1,0 +1,7 @@
+{
+  "versionCode": 2,
+  "versionName": "1.0.2",
+  "releaseNotes": "• Bordo fotocamera colorato dinamico per ogni modo di parlare (Verde Wispr, Azzurro RAW, Viola PRO, Indaco PROMPT, Ambra LIST)\n• In-App Updater integrato collegato a GitHub con verifica e download 1-tap\n• Logica contestuale e correzione attiva dei refusi vocali\n• Suddivisione automatica del parlato in paragrafi argomentativi",
+  "downloadUrl": "https://raw.githubusercontent.com/Bocelli/OpenFlow/main/releases/OpenFlow-Release-C-NotchDocked.apk",
+  "publishedAt": "2026-11-04"
+}

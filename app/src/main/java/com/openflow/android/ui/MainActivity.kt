@@ -170,6 +170,18 @@ fun MainSettingsScreen(
     var isKeyVisible by remember { mutableStateOf(false) }
     var showHistoryVault by remember { mutableStateOf(false) }
     var showLogDumpSheet by remember { mutableStateOf(false) }
+    var showUpdateSheet by remember { mutableStateOf(false) }
+    var availableUpdate by remember { mutableStateOf<com.openflow.android.util.UpdateInfo?>(null) }
+
+    LaunchedEffect(Unit) {
+        val updateMgr = com.openflow.android.util.UpdateManager(context)
+        val res = updateMgr.checkForUpdates()
+        res.onSuccess { info ->
+            if (info != null && info.isNewer) {
+                availableUpdate = info
+            }
+        }
+    }
 
     val micLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
@@ -280,6 +292,52 @@ fun MainSettingsScreen(
                 .padding(horizontal = 16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
+            // Banner aggiornamento disponibile
+            availableUpdate?.let { info ->
+                item {
+                    Surface(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { showUpdateSheet = true },
+                        color = StatusEmerald.copy(alpha = 0.15f),
+                        shape = RoundedCornerShape(14.dp),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, StatusEmerald.copy(alpha = 0.5f))
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.CloudDownload,
+                                contentDescription = null,
+                                tint = StatusEmerald,
+                                modifier = Modifier.size(24.dp)
+                            )
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "Nuova Versione Disponibile (v${info.versionName})",
+                                    fontWeight = FontWeight.Bold,
+                                    color = StatusEmerald,
+                                    fontSize = 13.sp
+                                )
+                                Text(
+                                    text = "Tocca per scaricare e installare con 1 tocco",
+                                    color = TextSecondary,
+                                    fontSize = 12.sp
+                                )
+                            }
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                                contentDescription = null,
+                                tint = StatusEmerald,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+                    }
+                }
+            }
+
             // 1. Action Card: Test Bolla & Trigger
             item {
                 TactileCard(
@@ -880,6 +938,55 @@ fun MainSettingsScreen(
                             modifier = Modifier.size(18.dp)
                         )
                     }
+
+                    HorizontalDivider(color = HairlineBorder.copy(alpha = 0.6f), thickness = 1.dp)
+
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { showUpdateSheet = true }
+                            .padding(vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    text = "Aggiornamenti GitHub",
+                                    fontWeight = FontWeight.Medium,
+                                    color = TextPrimary,
+                                    fontSize = 14.sp
+                                )
+                                if (availableUpdate != null) {
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Surface(
+                                        color = StatusEmerald,
+                                        shape = RoundedCornerShape(4.dp)
+                                    ) {
+                                        Text(
+                                            text = "UPDATE",
+                                            color = Color.Black,
+                                            fontSize = 10.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
+                                        )
+                                    }
+                                }
+                            }
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                text = "v${context.packageManager.getPackageInfo(context.packageName, 0).versionName ?: "1.0.2"} • Verifica release e scarica l'APK",
+                                color = TextSecondary,
+                                fontSize = 12.sp
+                            )
+                        }
+                        Icon(
+                            imageVector = Icons.Default.CloudDownload,
+                            contentDescription = null,
+                            tint = if (availableUpdate != null) StatusEmerald else TextSecondary,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
                 }
 
                 Spacer(modifier = Modifier.height(32.dp))
@@ -901,6 +1008,13 @@ fun MainSettingsScreen(
             LogDumpSheet(
                 prefs = prefs,
                 onDismiss = { showLogDumpSheet = false }
+            )
+        }
+
+        if (showUpdateSheet) {
+            UpdateSheet(
+                initialUpdateInfo = availableUpdate,
+                onDismiss = { showUpdateSheet = false }
             )
         }
     }

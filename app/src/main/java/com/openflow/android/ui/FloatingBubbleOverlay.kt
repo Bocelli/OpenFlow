@@ -493,13 +493,13 @@ class FloatingBubbleOverlay(
                 if (duration < 350) {
                     if (currentState == BubbleState.IDLE) {
                         val now = SystemClock.uptimeMillis()
-                        if (now - lastTapUpTime < 280) {
+                        if (now - lastTapUpTime < 340) {
                             handler.removeCallbacks(singleTapRunnable)
                             lastTapUpTime = 0L
                             cyclePreset()
                         } else {
                             lastTapUpTime = now
-                            handler.postDelayed(singleTapRunnable, 230)
+                            handler.postDelayed(singleTapRunnable, 260)
                         }
                     } else if (currentState == BubbleState.RECORDING) {
                         updateState(BubbleState.PROCESSING)
@@ -561,6 +561,16 @@ class FloatingBubbleOverlay(
         private var isCancelCandidate = false
         private var flashedPreset: PromptPreset? = null
 
+                private fun getPresetColor(preset: PromptPreset): Int {
+            return when (preset) {
+                PromptPreset.NATURAL -> Color.parseColor("#10B981")     // Emerald Neon (Wispr / Naturale)
+                PromptPreset.RAW_WHISPER -> Color.parseColor("#38BDF8") // Sky Blue Neon (Whisper Diretto)
+                PromptPreset.PROFESSIONAL -> Color.parseColor("#A855F7")// Royal Violet (Professionale / Email)
+                PromptPreset.AI_PROMPT -> Color.parseColor("#6366F1")   // Electric Indigo (Prompt IA)
+                PromptPreset.BULLETS -> Color.parseColor("#F59E0B")     // Radiant Amber (Liste / Task)
+            }
+        }
+
         private val clearPresetRunnable = Runnable {
             flashedPreset = null
             invalidate()
@@ -586,7 +596,7 @@ class FloatingBubbleOverlay(
         fun flashPreset(preset: PromptPreset) {
             flashedPreset = preset
             handler.removeCallbacks(clearPresetRunnable)
-            handler.postDelayed(clearPresetRunnable, 1000)
+            handler.postDelayed(clearPresetRunnable, 1400)
             invalidate()
         }
 
@@ -706,11 +716,13 @@ class FloatingBubbleOverlay(
                 }
                 canvas.drawRoundRect(haloRect, haloRadius, haloRadius, haloPaint)
             } else if (state == BubbleState.IDLE) {
-                // Sottile aura al neon che rende immediatamente riconoscibile il cerchio attorno al punch-hole
+                // Sottile aura al neon con colore distintivo del modo di parlare attivo
                 val idleHaloInset = inset - dpToPx(1.6f)
                 val idleHaloRect = RectF(idleHaloInset, idleHaloInset, w - idleHaloInset, h - idleHaloInset)
                 val idleHaloRadius = idleHaloRect.height() / 2f
-                haloPaint.color = Color.argb(45, 56, 189, 248) // Alone ciano traslucido
+                val activePreset = flashedPreset ?: prefs.activePreset
+                val activeColor = getPresetColor(activePreset)
+                haloPaint.color = Color.argb(55, Color.red(activeColor), Color.green(activeColor), Color.blue(activeColor))
                 canvas.drawRoundRect(idleHaloRect, idleHaloRadius, idleHaloRadius, haloPaint)
             }
 
@@ -738,7 +750,8 @@ class FloatingBubbleOverlay(
                 }
                 BubbleState.IDLE -> {
                     borderPaint.strokeWidth = dpToPx(1.8f).toFloat()
-                    borderPaint.color = Color.parseColor("#38BDF8") // Vivid Sky Blue Neon Ring
+                    val activePreset = flashedPreset ?: prefs.activePreset
+                    borderPaint.color = getPresetColor(activePreset)
                 }
             }
             canvas.drawRoundRect(rect, radius, radius, borderPaint)
@@ -755,13 +768,7 @@ class FloatingBubbleOverlay(
                             PromptPreset.PROFESSIONAL -> "PRO"
                             PromptPreset.BULLETS -> "LIST"
                         }
-                        val accentColor = when (p) {
-                            PromptPreset.NATURAL -> Color.parseColor("#10B981")
-                            PromptPreset.RAW_WHISPER -> Color.parseColor("#38BDF8")
-                            PromptPreset.AI_PROMPT -> Color.parseColor("#818CF8")
-                            PromptPreset.PROFESSIONAL -> Color.parseColor("#E4E4E7")
-                            PromptPreset.BULLETS -> Color.parseColor("#F59E0B")
-                        }
+                        val accentColor = getPresetColor(p)
                         statusTextPaint.textAlign = Paint.Align.CENTER
                         statusTextPaint.color = accentColor
                         statusTextPaint.textSize = dpToPx(10f).toFloat()
@@ -770,13 +777,7 @@ class FloatingBubbleOverlay(
                         // Micro-punto rifinito che indica lo stile attivo
                         val dotPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
                             style = Paint.Style.FILL
-                            color = when (prefs.activePreset) {
-                                PromptPreset.NATURAL -> Color.parseColor("#10B981")
-                                PromptPreset.RAW_WHISPER -> Color.parseColor("#38BDF8")
-                                PromptPreset.AI_PROMPT -> Color.parseColor("#818CF8")
-                                PromptPreset.PROFESSIONAL -> Color.parseColor("#E4E4E7")
-                                PromptPreset.BULLETS -> Color.parseColor("#F59E0B")
-                            }
+                            color = getPresetColor(prefs.activePreset)
                         }
                         canvas.drawCircle(cx, cy + dpToPx(9.5f), dpToPx(1.6f).toFloat(), dotPaint)
                     }
