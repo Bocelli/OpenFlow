@@ -325,50 +325,42 @@ class AiPipelineClient(private val prefs: PreferencesManager) {
         val cleanKey = apiKey.trim()
         val cleanBaseUrl = provider.baseUrl.trim().removeSuffix("/")
 
-        // 1. Tentativo Primario
-        val primaryResult = executeLlmCall(rawText, cleanKey, cleanBaseUrl, provider.llmModel)
-        if (primaryResult.isSuccess) {
-            return primaryResult
-        }
-
-        val primaryError = primaryResult.exceptionOrNull()?.message ?: "Errore sconosciuto"
-        Log.w(TAG, "Tentativo primario fallito con ${provider.llmModel}: $primaryError")
-
-        // 2. Per Groq: fallback su modelli attivi della nuova generazione
+        // Per Groq: sequenza dinamica con cache locale e auto-discovery modelli
         if (provider == com.openflow.android.data.ApiProvider.GROQ) {
-            val fallbackCandidates = listOf(
-                "llama-3.3-70b-versatile",
-                "llama-3.1-8b-instant",
-                "llama3-8b-8192",
-                "gemma2-9b-it"
-            )
-            for (candidate in fallbackCandidates) {
-                if (candidate != provider.llmModel) {
-                    Log.i(TAG, "Tentativo fallback Groq con '$candidate'...")
-                    val res = executeLlmCall(rawText, cleanKey, cleanBaseUrl, candidate)
-                    if (res.isSuccess) {
-                        Log.i(TAG, "Fallback Groq riuscito con $candidate!")
-                        return res
-                    }
-                }
-            }
+            val candidateModels = sequence {
+                prefs.cachedGroqModel?.let { yield(it) }
+                yield(provider.llmModel)
+                yieldAll(GROQ_DEFAULT_MODELS)
+                yieldAll(discoverActiveGroqModels(cleanKey))
+            }.distinct().take(4)
 
-            // 3. Fallback dinamico: interroga /models su Groq
-            Log.i(TAG, "Tentativo auto-discovery modelli attivi su Groq...")
-            val discoveredModel = discoverActiveGroqModel(cleanKey)
-            if (discoveredModel != null && discoveredModel != provider.llmModel) {
-                Log.i(TAG, "Trovato modello attivo Groq: $discoveredModel")
-                val res = executeLlmCall(rawText, cleanKey, cleanBaseUrl, discoveredModel)
+            var lastError: Exception? = null
+            for (model in candidateModels) {
+                Log.d(TAG, "Tentativo Groq LLM con modello: $model")
+                val res = executeLlmCall(rawText, cleanKey, cleanBaseUrl, model)
                 if (res.isSuccess) {
+                    prefs.cachedGroqModel = model
+                    Log.i(TAG, "Groq riuscito con successo su modello: $model!")
                     return res
+                } else {
+                    val err = res.exceptionOrNull()
+                    lastError = err as? Exception ?: IOException(err?.message)
+                    if (prefs.cachedGroqModel == model) {
+                        prefs.cachedGroqModel = null
+                    }
+                    val msg = err?.message ?: ""
+                    // Chiave non valida o accesso negato: interruzione immediata
+                    if (msg.contains("HTTP 401") || msg.contains("HTTP 403")) break
                 }
             }
+            return Result.failure(lastError ?: IOException("Tutti i tentativi Groq sono falliti"))
         }
 
-        return primaryResult
+        // Per OpenAI o altri provider
+        return executeLlmCall(rawText, cleanKey, cleanBaseUrl, provider.llmModel)
     }
 
-    private fun discoverActiveGroqModel(apiKey: String): String? {
+    private fun discoverActiveGroqModels(apiKey: String): List<String> {
         return try {
             val req = Request.Builder()
                 .url("https://api.groq.com/openai/v1/models")
@@ -377,18 +369,43 @@ class AiPipelineClient(private val prefs: PreferencesManager) {
                 .build()
             val resp = httpClient.newCall(req).execute()
             val body = resp.body?.string() ?: ""
-            if (!resp.isSuccessful) return null
+            if (!resp.isSuccessful) return emptyList()
             val json = JSONObject(body)
-            val data = json.optJSONArray("data") ?: return null
+            val data = json.optJSONArray("data") ?: return emptyList()
+            val candidates = mutableListOf<String>()
             for (i in 0 until data.length()) {
                 val id = data.getJSONObject(i).optString("id", "")
-                if (id.isNotBlank() && !id.contains("whisper") && !id.contains("guard") && !id.contains("moderation")) {
-                    return id
+                val lower = id.lowercase()
+                if (id.isNotBlank() &&
+                    !lower.contains("whisper") &&
+                    !lower.contains("guard") &&
+                    !lower.contains("moderation") &&
+                    !lower.contains("vision") &&
+                    !lower.contains("orpheus") &&
+                    !lower.contains("tts") &&
+                    !lower.contains("embedding")) {
+                    candidates.add(id)
                 }
             }
-            null
-        } catch (_: Exception) {
-            null
+            candidates.sortedWith(Comparator { a, b ->
+                fun score(name: String): Int {
+                    val n = name.lowercase()
+                    return when {
+                        n.contains("gpt-oss-120b") -> 100
+                        n.contains("gpt-oss-20b") -> 95
+                        n.contains("qwen3.8") || n.contains("qwen3.6") -> 90
+                        n.contains("qwen") -> 85
+                        n.contains("llama-3.3-70b") -> 80
+                        n.contains("llama-3.1-8b") -> 75
+                        n.contains("llama") -> 60
+                        else -> 50
+                    }
+                }
+                score(b).compareTo(score(a))
+            })
+        } catch (e: Exception) {
+            Log.e(TAG, "Eccezione durante discovery modelli Groq: ${e.message}")
+            emptyList()
         }
     }
 
@@ -470,11 +487,19 @@ class AiPipelineClient(private val prefs: PreferencesManager) {
         private const val TAG = "AiPipelineClient"
         private const val MAX_GEMINI_ATTEMPTS = 4
         private val GEMINI_DEFAULT_MODELS = listOf(
-            "gemini-2.5-flash",
-            "gemini-2.0-flash",
-            "gemini-1.5-flash",
-            "gemini-2.5-flash-lite",
-            "gemini-2.0-flash-lite"
+            "gemini-3.5-flash-lite",
+            "gemini-3.8-flash",
+            "gemini-3.5-flash",
+            "gemini-2.5-flash"
+        )
+
+        private val GROQ_DEFAULT_MODELS = listOf(
+            "openai/gpt-oss-120b",
+            "openai/gpt-oss-20b",
+            "qwen/qwen3.8-27b",
+            "qwen/qwen3.6-27b",
+            "llama-3.3-70b-versatile",
+            "llama-3.1-8b-instant"
         )
 
         /**

@@ -365,18 +365,16 @@ class FlowAccessibilityService : AccessibilityService() {
             }
 
             response.onSuccess { output ->
-                if (output.isFallback && output.errorMessage != null) {
-                    showNotificationAlert("⚠️ OpenFlow: Fallito LLM", output.errorMessage)
-                }
-
                 if (output.text.isBlank()) {
+                    if (output.errorMessage != null) {
+                        showNotificationAlert("⚠️ OpenFlow: Trascrizione non riuscita", output.errorMessage)
+                    }
                     bubbleOverlay?.updateState(if (output.errorMessage != null) BubbleState.ERROR else BubbleState.IDLE)
                     return@onSuccess
                 }
 
-                val wasPassword = insertTextIntoActiveField(
-                    if (output.isFallback) "[⚠️ Fallback Whisper: LLM non disponibile]\n\n${output.text}" else output.text
-                )
+                // Inserimento pulito e silenzioso: anche in caso di fallback Whisper, nessun prefisso di errore
+                val wasPassword = insertTextIntoActiveField(output.text)
                 bubbleOverlay?.updateState(BubbleState.SUCCESS)
 
                 // Salva nella cronologia locale SOLO se NON era un campo password/sensibile
