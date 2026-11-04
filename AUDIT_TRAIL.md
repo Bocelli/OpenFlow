@@ -40,6 +40,13 @@
     - Fixed JSON parser bug: if choices were missing, it previously returned `Result.success(rawText)`, which tricked the pipeline into thinking the call succeeded and prevented fallback.
     - Removed `contextText` pollution from system prompt to stop confusing Llama with prior draft text.
     - Added explicit in-field diagnostic prefix on fallback so any API failure is immediately visible.
+  - Resolved Groq 404 & Decommissioned Models + Added Google Gemini Multimodal Provider:
+    - Root cause discovery: Groq decommissioned both `llama-3.3-70b-versatile` and `llama-3.1-8b-instant`, causing HTTP 404 `model_not_found` on all LLM requests, forcing raw Whisper fallback.
+    - Updated Groq default LLM model to `openai/gpt-oss-120b` with fallbacks to `openai/gpt-oss-20b` and `qwen/qwen3.8-27b`.
+    - Added dynamic active model auto-discovery (`GET /v1/models`) on Groq to prevent future 404 errors if catalog changes.
+    - Integrated Google Gemini (`gemini-2.5-flash` / `gemini-2.0-flash`) as a 100% free first-class provider using native multimodal audio (`audio/mp4` inline data) via Google AI Studio.
+    - Updated UI in `MainActivity.kt`: added 3-way provider selector (Groq, Gemini, OpenAI) and updated preferences storage.
+    - Verified compilation & tests passed: new APK `OpenFlow-debug.apk` (16.4 MB).
   - Compiled and verified debug APK: `OpenFlow-debug.apk` (16.4 MB) ready for deployment.
   - Implemented core Android architecture:
     - `data/PreferencesManager.kt`: EncryptedSharedPreferences, OpenAI & Groq endpoints, prompt presets.
