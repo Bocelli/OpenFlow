@@ -226,14 +226,22 @@ class AiPipelineClient(private val prefs: PreferencesManager) {
             // 5. Deduplicazione automatica parole consecutive (elimina balbettii con pause, virgole o spazi)
             // Usa \p{L} per supportare qualsiasi carattere Unicode (inclusi accenti italiani: à è é ì ò ù)
             val duplicateSingleWordRegex = Regex("""\b(\p{L}+)[\s,.;:-]+\1\b""", RegexOption.IGNORE_CASE)
-            while (duplicateSingleWordRegex.containsMatchIn(clean)) {
-                clean = clean.replace(duplicateSingleWordRegex) { match -> match.groupValues[1] }
+            var singleWordIter = 0
+            while (duplicateSingleWordRegex.containsMatchIn(clean) && singleWordIter < 10) {
+                val updated = clean.replace(duplicateSingleWordRegex) { match -> match.groupValues[1] }
+                if (updated == clean) break
+                clean = updated
+                singleWordIter++
             }
 
             // Deduplicazione per frasi di due parole duplicate consecutive (es. "sto facendo, sto facendo" -> "sto facendo")
             val duplicateTwoWordsRegex = Regex("""\b(\p{L}+[\s,]+\p{L}+)[\s,.;:-]+\1\b""", RegexOption.IGNORE_CASE)
-            while (duplicateTwoWordsRegex.containsMatchIn(clean)) {
-                clean = clean.replace(duplicateTwoWordsRegex) { match -> match.groupValues[1] }
+            var twoWordsIter = 0
+            while (duplicateTwoWordsRegex.containsMatchIn(clean) && twoWordsIter < 10) {
+                val updated = clean.replace(duplicateTwoWordsRegex) { match -> match.groupValues[1] }
+                if (updated == clean) break
+                clean = updated
+                twoWordsIter++
             }
 
             // 6. Normalizzazione spaziature tipografiche

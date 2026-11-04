@@ -25,7 +25,12 @@
     - Enhanced Unicode regex sanitizer: deduplication across punctuation/commas (io, io -> Io), accented character support (però, però), and 2-word phrase deduplication.
     - Robust capitalization after periods, questions, exclamations, quotes, and newlines.
     - Typographic punctuation cleanup (no spaces before commas/periods, trimmed quote interiors).
-  - Compiled and verified debug APK: `OpenFlow-debug.apk` (16.3 MB) ready for deployment.
+  - Resolved Accessibility Service update & lifecycle disconnect:
+    - Preserved `serviceInfo` XML configuration and capabilities (`canRetrieveWindowContent`) during runtime setup.
+    - Removed forbidden `startService` call on AccessibilityService in MainActivity to prevent SecurityExceptions.
+    - Added Lifecycle `ON_RESUME` re-check to instantly refresh permissions and restore the bubble when returning from Android settings.
+    - Defaulted `showOnlyWhenFocused` to false so the bubble is persistently available on screen.
+  - Compiled and verified debug APK: `OpenFlow-debug.apk` (16.4 MB) ready for deployment.
   - Implemented core Android architecture:
     - `data/PreferencesManager.kt`: EncryptedSharedPreferences, OpenAI & Groq endpoints, prompt presets.
     - `audio/AudioRecorderManager.kt`: High-efficiency AAC/M4A 16kHz audio capture with live amplitude metering.

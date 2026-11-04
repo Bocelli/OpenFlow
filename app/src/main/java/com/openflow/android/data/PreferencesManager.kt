@@ -184,7 +184,7 @@ class PreferencesManager(context: Context) {
         set(value) = prefs.edit().putString(KEY_LANGUAGE, value).apply()
 
     var showOnlyWhenFocused: Boolean
-        get() = prefs.getBoolean(KEY_SHOW_ONLY_WHEN_FOCUSED, true)
+        get() = prefs.getBoolean(KEY_SHOW_ONLY_WHEN_FOCUSED, false)
         set(value) = prefs.edit().putBoolean(KEY_SHOW_ONLY_WHEN_FOCUSED, value).apply()
 
     var hapticFeedbackEnabled: Boolean

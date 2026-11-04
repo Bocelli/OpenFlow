@@ -47,18 +47,22 @@ class FlowAccessibilityService : AccessibilityService() {
 
     override fun onServiceConnected() {
         super.onServiceConnected()
+        instance = this
         Log.d(TAG, "FlowAccessibilityService onServiceConnected!")
 
-        serviceInfo = AccessibilityServiceInfo().apply {
-            eventTypes = AccessibilityEvent.TYPES_ALL_MASK
-            feedbackType = AccessibilityServiceInfo.FEEDBACK_GENERIC
-            flags = AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS or
-                    AccessibilityServiceInfo.FLAG_REPORT_VIEW_IDS
-            notificationTimeout = 50
-        }
+        // Modifica l'oggetto serviceInfo esistente per NON perdere i permessi definiti nell'XML (es. canRetrieveWindowContent="true")
+        val info = serviceInfo ?: AccessibilityServiceInfo()
+        info.eventTypes = AccessibilityEvent.TYPES_ALL_MASK
+        info.feedbackType = AccessibilityServiceInfo.FEEDBACK_GENERIC
+        info.flags = info.flags or
+                AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS or
+                AccessibilityServiceInfo.FLAG_REPORT_VIEW_IDS
+        info.notificationTimeout = 50
+        serviceInfo = info
 
         initBubbleOverlay()
 
+        // Mostra subito la bolla se l'utente non ha impostato la modalità a comparsa esclusiva
         if (!prefs.showOnlyWhenFocused) {
             bubbleOverlay?.show()
         }
@@ -98,27 +102,31 @@ class FlowAccessibilityService : AccessibilityService() {
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         if (event == null) return
 
-        val source = event.source
-        val root = rootInActiveWindow
-        val focusedNode = root?.findFocus(AccessibilityNodeInfo.FOCUS_INPUT)
+        var sourceNode: AccessibilityNodeInfo? = null
+        var focusedNode: AccessibilityNodeInfo? = null
 
-        val isEditableField = (source?.isEditable == true) || (focusedNode?.isEditable == true)
+        try {
+            sourceNode = event.source
+            val root = rootInActiveWindow
+            focusedNode = root?.findFocus(AccessibilityNodeInfo.FOCUS_INPUT)
 
-        if (isEditableField) {
-            val target = if (source?.isEditable == true) source else focusedNode
-            if (target != null) {
-                try {
-                    activeTargetNode?.recycle()
-                    activeTargetNode = AccessibilityNodeInfo.obtain(target)
-                    // Estrae il testo reale ignorando il placeholder/hint di WhatsApp ("Message")
-                    currentContextText = getSanitizedFieldText(target).ifBlank { null }
-                } catch (_: Exception) {}
-            }
+            val isEditableField = (sourceNode?.isEditable == true) || (focusedNode?.isEditable == true)
 
-            if (prefs.showOnlyWhenFocused) {
+            if (isEditableField) {
+                val target = if (sourceNode?.isEditable == true) sourceNode else focusedNode
+                if (target != null) {
+                    try {
+                        activeTargetNode?.recycle()
+                        activeTargetNode = AccessibilityNodeInfo.obtain(target)
+                        currentContextText = getSanitizedFieldText(target).ifBlank { null }
+                    } catch (_: Exception) {}
+                }
+
                 ensureOverlayInitialized()
                 bubbleOverlay?.show()
             }
+        } catch (e: Exception) {
+            Log.e(TAG, "Errore onAccessibilityEvent: ${e.message}", e)
         }
     }
 

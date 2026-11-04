@@ -56,6 +56,7 @@ val FlowTextSecondary = Color(0xFF9CA3AF)
 class MainActivity : ComponentActivity() {
 
     private lateinit var prefs: PreferencesManager
+    private val resumeCount = mutableStateOf(0)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -63,9 +64,14 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             OpenFlowTheme {
-                MainSettingsScreen(prefs = prefs)
+                MainSettingsScreen(prefs = prefs, resumeTrigger = resumeCount.value)
             }
         }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        resumeCount.value++
     }
 }
 
@@ -84,7 +90,7 @@ fun OpenFlowTheme(content: @Composable () -> Unit) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun MainSettingsScreen(prefs: PreferencesManager) {
+fun MainSettingsScreen(prefs: PreferencesManager, resumeTrigger: Int = 0) {
     val context = LocalContext.current
 
     var hasMicPermission by remember {
@@ -112,9 +118,13 @@ fun MainSettingsScreen(prefs: PreferencesManager) {
         hasMicPermission = isGranted
     }
 
-    LaunchedEffect(Unit) {
+    LaunchedEffect(resumeTrigger) {
         hasOverlayPermission = Settings.canDrawOverlays(context)
         hasAccessibilityPermission = isAccessibilityServiceEnabled(context)
+        hasMicPermission = ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
+        if (FlowAccessibilityService.instance != null && !prefs.showOnlyWhenFocused) {
+            FlowAccessibilityService.instance?.triggerShowBubble()
+        }
     }
 
     Scaffold(
@@ -190,21 +200,22 @@ fun MainSettingsScreen(prefs: PreferencesManager) {
                         Spacer(modifier = Modifier.height(12.dp))
                         Button(
                             onClick = {
-                                if (!hasAccessibilityPermission) {
-                                    Toast.makeText(context, "Attiva prima il Servizio di Accessibilità OpenFlow in basso!", Toast.LENGTH_LONG).show()
-                                    context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+                                val service = FlowAccessibilityService.instance
+                                if (service != null) {
+                                    service.triggerShowBubble()
+                                    Toast.makeText(context, "Bollicina mostrata sul bordo dello schermo! ✨", Toast.LENGTH_SHORT).show()
                                 } else {
-                                    val service = FlowAccessibilityService.instance
-                                    if (service != null) {
-                                        service.triggerShowBubble()
-                                        Toast.makeText(context, "Bollicina mostrata sul bordo dello schermo!", Toast.LENGTH_SHORT).show()
-                                    } else {
-                                        val intent = Intent(context, FlowAccessibilityService::class.java).apply {
-                                            action = FlowAccessibilityService.ACTION_SHOW_BUBBLE
-                                        }
-                                        context.startService(intent)
-                                        Toast.makeText(context, "Avvio del servizio bollicina in corso...", Toast.LENGTH_SHORT).show()
+                                    // Dopo un aggiornamento APK, Android disconnette temporaneamente i servizi di accessibilità.
+                                    // Invitiamo l'utente a fare il rapido toggle (Off/On) nelle impostazioni.
+                                    Toast.makeText(
+                                        context,
+                                        "⚠️ Servizio disconnesso dall'aggiornamento. Disattiva e riattiva 'OpenFlow' in Accessibilità per riavviare!",
+                                        Toast.LENGTH_LONG
+                                    ).show()
+                                    val intent = Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).apply {
+                                        flags = Intent.FLAG_ACTIVITY_NEW_TASK
                                     }
+                                    context.startActivity(intent)
                                 }
                             },
                             colors = ButtonDefaults.buttonColors(containerColor = FlowViolet),
@@ -563,7 +574,10 @@ fun PresetCard(preset: PromptPreset, isSelected: Boolean, onClick: () -> Unit) {
 }
 
 private fun isAccessibilityServiceEnabled(context: Context): Boolean {
-    val am = context.getSystemService(Context.ACCESSIBILITY_SERVICE) as AccessibilityManager
-    val enabledServices = am.getEnabledAccessibilityServiceList(AccessibilityServiceInfo.FEEDBACK_GENERIC)
+    // Se l'istanza è viva in memoria, il servizio è sicuramente attivo al 100%
+    if (FlowAccessibilityService.instance != null) return true
+
+    val am = context.getSystemService(Context.ACCESSIBILITY_SERVICE) as? AccessibilityManager ?: return false
+    val enabledServices = am.getEnabledAccessibilityServiceList(AccessibilityServiceInfo.FEEDBACK_ALL_MASK)
     return enabledServices.any { it.resolveInfo.serviceInfo.packageName == context.packageName }
 }
