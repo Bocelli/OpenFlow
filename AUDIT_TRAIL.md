@@ -7,4 +7,15 @@
 - **Target OS**: Android (API 26+)
 
 ## Change Log
-- **2026-11-04**: Initialized repository, completed Agent Reach research on Wispr Flow alternatives, established conceptual map and architectural blueprint.
+- **2026-11-04**:
+  - Initialized repository, completed Agent Reach research on Wispr Flow alternatives.
+  - Completed conceptual map and architectural blueprint in `trail_audit_and_architecture.md`.
+  - Conducted UI interview: selected auto-popup bubble on focus, hybrid tap/push-to-talk, and Wispr Dark aesthetic.
+  - Implemented core Android architecture:
+    - `data/PreferencesManager.kt`: EncryptedSharedPreferences, OpenAI & Groq endpoints, prompt presets.
+    - `audio/AudioRecorderManager.kt`: High-efficiency AAC/M4A 16kHz audio capture with live amplitude metering.
+    - `ai/AiPipelineClient.kt`: Two-stage pipeline (Whisper STT + LLM formatting/cleaner) with zero heavy SDKs.
+    - `ui/FloatingBubbleOverlay.kt`: Floating hardware-accelerated canvas bubble with hybrid touch, dynamic waveform, and Wispr Dark styling.
+    - `service/FlowAccessibilityService.kt`: Intercepts focused editable fields and injects polished text seamlessly via `ACTION_SET_TEXT`.
+    - `ui/MainActivity.kt`: Jetpack Compose OLED Dark configuration and permissions onboarding.
+    - `test/PromptPresetTest.kt`: Unit tests verifying prompt contract integrity.

@@ -1,0 +1,4 @@
+<resources>
+    <string name="app_name">OpenFlow</string>
+    <string name="accessibility_service_description">OpenFlow rileva quando tocchi un campo di testo per mostrare la bollicina di dettatura IA e inserire automaticamente il testo formattato.</string>
+</resources>
