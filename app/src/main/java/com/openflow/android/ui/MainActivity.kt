@@ -162,11 +162,14 @@ fun MainSettingsScreen(
     var showOnlyWhenFocused by remember { mutableStateOf(prefs.showOnlyWhenFocused) }
     var stealthModeEnabled by remember { mutableStateOf(prefs.stealthModeEnabled) }
     var customVocabulary by remember { mutableStateOf(prefs.customVocabulary) }
-    var hapticEnabled by remember { mutableStateOf(prefs.hapticFeedbackEnabled) }
-    var notchOffsetY by remember { mutableStateOf(prefs.notchOffsetY) }
+    var hapticEnabled by remember { mutableStateOf(prefs.hapticFeedbackEnabled) }
+
+    var notchOffsetY by remember { mutableStateOf(prefs.notchOffsetY) }
+
     var notchOffsetX by remember { mutableStateOf(prefs.notchOffsetX) }
     var isKeyVisible by remember { mutableStateOf(false) }
     var showHistoryVault by remember { mutableStateOf(false) }
+    var showLogDumpSheet by remember { mutableStateOf(false) }
 
     val micLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
@@ -767,8 +770,10 @@ fun MainSettingsScreen(
                         }
                     }
                 }
-            }
-
+            }
+
+
+
             // 7. Strumenti & Guida
             item {
                 SectionHeader(title = "STRUMENTI & GUIDA")
@@ -843,6 +848,38 @@ fun MainSettingsScreen(
                             modifier = Modifier.size(18.dp)
                         )
                     }
+
+                    HorizontalDivider(color = HairlineBorder.copy(alpha = 0.6f), thickness = 1.dp)
+
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { showLogDumpSheet = true }
+                            .padding(vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Diagnostica & Dump Log",
+                                fontWeight = FontWeight.Medium,
+                                color = TextPrimary,
+                                fontSize = 14.sp
+                            )
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                text = "Genera e invia il report di sistema e logcat per identificare bug",
+                                color = TextSecondary,
+                                fontSize = 12.sp
+                            )
+                        }
+                        Icon(
+                            imageVector = Icons.Default.BugReport,
+                            contentDescription = null,
+                            tint = TextSecondary,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
                 }
 
                 Spacer(modifier = Modifier.height(32.dp))
@@ -857,6 +894,13 @@ fun MainSettingsScreen(
             BatteryOptimizationGuideDialog(
                 initialBrand = currentBrand,
                 onDismiss = { showBatteryGuideDialog = false }
+            )
+        }
+
+        if (showLogDumpSheet) {
+            LogDumpSheet(
+                prefs = prefs,
+                onDismiss = { showLogDumpSheet = false }
             )
         }
     }
