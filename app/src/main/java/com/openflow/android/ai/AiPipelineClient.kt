@@ -136,7 +136,7 @@ class AiPipelineClient(private val prefs: PreferencesManager) {
                         put("role", "user")
                         put("parts", JSONArray().apply {
                             put(JSONObject().apply {
-                                put("text", "Trascrivi e formatta il parlato contenuto in questa registrazione secondo le istruzioni del sistema: raggruppa le frasi in paragrafi coesi e solidi (NON spezzettare ogni frase a capo), usa le virgolette caporali «...» per i nomi di progetti o app, sistema la punteggiatura con ritmo naturale ed espressivo, ed elimina rigorosamente gli intercalari ed esitazioni orali (es. 'praticamente', 'e praticamente', 'diciamo'). Scrivi correttamente i brand e modelli hardware (Groq, OpenAI, Gemini, Flash-Lite, Antigravity, OpenFlow). Restituisci ESCLUSIVAMENTE il testo finale elaborato pronto da inviare.")
+                                put("text", "Trascrivi e formatta il parlato contenuto in questa registrazione secondo le istruzioni del sistema: rendi il testo naturale, scorrevole e pronto da inviare in chat. Correggi errori fonetici del parlato e accordi grammaticali, elimina esitazioni e balbettii, usa punteggiatura naturale (NON usare MAI virgolette caporali «...») e rispetta il tono spontaneo dell'utente. Restituisci ESCLUSIVAMENTE il testo finale pulito pronto da inviare.")
                             })
                             put(JSONObject().apply {
                                 put("inline_data", JSONObject().apply {
@@ -337,8 +337,8 @@ class AiPipelineClient(private val prefs: PreferencesManager) {
         // 2. Per Groq: fallback su modelli attivi della nuova generazione
         if (provider == com.openflow.android.data.ApiProvider.GROQ) {
             val fallbackCandidates = listOf(
-                "llama-3.1-8b-instant",
                 "llama-3.3-70b-versatile",
+                "llama-3.1-8b-instant",
                 "llama3-8b-8192",
                 "gemma2-9b-it"
             )

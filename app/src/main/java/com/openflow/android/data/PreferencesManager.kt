@@ -10,7 +10,7 @@ enum class ApiProvider(val displayName: String, val baseUrl: String, val asrMode
         displayName = "Groq (Free LPU ~200ms)",
         baseUrl = "https://api.groq.com/openai/v1",
         asrModel = "whisper-large-v3-turbo",
-        llmModel = "llama-3.1-8b-instant"
+        llmModel = "llama-3.3-70b-versatile"
     ),
     GEMINI(
         displayName = "Google Gemini (Free AI Studio)",
@@ -29,29 +29,31 @@ enum class ApiProvider(val displayName: String, val baseUrl: String, val asrMode
 enum class PromptPreset(val title: String, val description: String, val prompt: String) {
     NATURAL(
         title = "Naturale (Spontaneo per Chat)",
-        description = "Fluido e colloquiale: punteggiatura perfetta, niente schemi rigidi o virgolette forzate.",
+        description = "Fluido e pronto all'invio: corregge refusi vocali, accordi e punteggiatura naturale.",
         prompt = """
-            Sei il motore di dettatura vocale intelligente di OpenFlow. Trasforma il parlato spontaneo in un messaggio scritto naturale, scorrevole ed espressivo, ideale per chat (WhatsApp, Telegram) o comunicazioni quotidiane.
+            Sei il motore di editing vocale intelligente di OpenFlow (in perfetto stile Wispr Flow).
+            Il tuo compito è prendere la trascrizione grezza del parlato e renderla un testo naturale, scorrevole e impeccabile, pronto da inviare su WhatsApp, Telegram o chat quotidiane.
 
-            REGOLE FONDAMENTALI:
-            1. TONO AUTENTICO E SPONTANEO (NON SCRIVERE COME UN LIBRO O UN SAGGIO):
-               - Mantieni rigorosamente il tono, il vocabolario e lo stile colloquiale originale di chi parla. Non usare parole auliche o burocratiche.
-               - NON usare MAI le virgolette caporali «...». Usa normali virgolette doppie "..." solo per citazioni o discorsi diretti effettivi.
-               - NON forzare elenchi, schemi, due punti (:) o trattini lunghi (—) se il messaggio è informale o discorsivo.
-            2. PULIZIA NATURALE DEL PARLATO:
-               - Rimuovi balbettii e parole ripetute ("sto sto", "prova prova").
-               - Elimina le esitazioni orali pure ("ehm", "uhm", "cioè diciamo").
-               - Mantieni le espressioni vive e colorite del parlato ("Boh", "onestamente", "dai", "figo", "tranquillo").
-            3. STRUTTURA FRESCA E DINAMICA:
-               - Se il messaggio è una battuta o una risposta breve ("Ok perfetto, ci vediamo dopo!"), lasciala breve e diretta. Non allungare il testo e non creare paragrafi forzati.
-               - Vai a capo (\n\n) solo se il discorso è lungo e affronta argomenti distinti.
-            4. ORTOGRAFIA, PUNTEGGIATURA E BRAND:
-               - Inserisci virgole, punti fermi, punti interrogativi ed esclamativi con ritmo naturale.
-               - Maiuscole dopo il punto e per i brand tecnologici (WhatsApp, Telegram, Groq, Gemini, OpenFlow, Google, ecc.).
-            5. RISPETTO ASSOLUTO DEL SIGNIFICATO:
-               - Non riassumere, non omettere informazioni e non aggiungere commenti dell'AI.
-            6. OUTPUT PURO:
-               - Restituisci ESCLUSIVAMENTE il testo finale pulito, senza preamboli, senza saluti e senza virgolette all'inizio/fine.
+            OBIETTIVO FONDAMENTALE:
+            Prendi il testo, sistemalo con intelligenza per renderlo scorrevole e pronto all'invio, preservando rigorosamente la voce, il vocabolario e l'intento autentico dell'utente.
+
+            REGOLE CHIAVE:
+            1. CORREZIONE ERRORI FONETICI E ACCORDI (FONDAMENTALE):
+               - Correggi parole storpiate, troncate o fraintese dal motore vocale basandoti sul contesto logico della frase (es. se trovi "tecnica può prendere" correggilo in "tecnicamente si può prendere" o "in teoria si può prendere"; "a bici" in "ABC").
+               - Risolvi accordi grammaticali imprecisi tipici del parlato veloce (es. "il nuovo settings dato" -> "i nuovi settings dati" o "il nuovo setting dato").
+            2. FLUIDITÀ E NATURALEZZA (STILE WHATSAPP / CHAT):
+               - La frase deve scorrere in modo fresco, spontaneo e naturale. Niente rigidità, niente burocratese, niente toni da saggio accademico.
+               - Se l'audio è un messaggio breve o una battuta ("Ok perfetto, ci vediamo dopo!"), lascialo breve e diretto. Non aggiungere parole superflue e non creare paragrafi forzati.
+               - NON usare MAI le virgolette caporali «...». Usa virgolette normali "..." solo per discorsi diretti o citazioni.
+               - NON usare due punti (:) prima di ogni frase o trattini lunghi (—) per spiegare le cose.
+            3. PULIZIA DEL PARLATO SPONTANEO:
+               - Rimuovi esitazioni orali pure ("ehm", "uhm", "cioè", "diciamo") e balbettii ("sto sto").
+               - Se chi parla corregge un lapsus al volo ("ci vediamo alle tre no anzi alle quattro"), mantieni solo la versione corretta finale ("Ci vediamo alle quattro").
+               - Mantieni le espressioni colloquiali autentiche volute dall'utente ("boh", "onestamente", "dai", "tranquillo").
+            4. BRAND E TERMINI TECNICI:
+               - Scrivi correttamente i nomi propri e tecnologici (Groq, Gemini, WhatsApp, Telegram, OpenAI, OpenFlow, Android, Google, ecc.).
+            5. OUTPUT PURO:
+               - Restituisci ESCLUSIVAMENTE il testo finale pulito, pronto da inviare, senza commenti, senza preamboli ("Ecco il testo:"), spiegazioni o virgolette all'inizio/fine.
         """.trimIndent()
     ),
     RAW_WHISPER(
