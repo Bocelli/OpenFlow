@@ -36,6 +36,39 @@ class FlowAccessibilityService : AccessibilityService() {
     private var activeTargetNode: AccessibilityNodeInfo? = null
     private var currentContextText: String? = null
 
+    private val checkWindowFocusRunnable = Runnable {
+        try {
+            val root = rootInActiveWindow ?: return@Runnable
+            try {
+                val focused = root.findFocus(AccessibilityNodeInfo.FOCUS_INPUT)
+                try {
+                    if (focused != null && isLikelyInputField(focused)) {
+                        mainHandler.removeCallbacks(hideBubbleRunnable)
+                        updateActiveTarget(focused)
+                        ensureOverlayInitialized()
+                        if (prefs.showOnlyWhenFocused) {
+                            bubbleOverlay?.show()
+                        }
+                    } else {
+                        scheduleHideBubbleIfIdle()
+                    }
+                } finally {
+                    try { focused?.recycle() } catch (_: Exception) {}
+                }
+            } finally {
+                try { root.recycle() } catch (_: Exception) {}
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Errore checkWindowFocus: ${e.message}", e)
+        }
+    }
+
+    private val hideBubbleRunnable = Runnable {
+        if (prefs.showOnlyWhenFocused && bubbleOverlay?.currentState == BubbleState.IDLE) {
+            bubbleOverlay?.hide()
+        }
+    }
+
     override fun onCreate() {
         super.onCreate()
         instance = this
@@ -50,19 +83,20 @@ class FlowAccessibilityService : AccessibilityService() {
         instance = this
         Log.d(TAG, "FlowAccessibilityService onServiceConnected!")
 
-        // Modifica l'oggetto serviceInfo esistente per NON perdere i permessi definiti nell'XML (es. canRetrieveWindowContent="true")
+        // Configura eventi mirati (MAI TYPES_ALL_MASK che satura l'IPC di sistema e blocca il touch)
         val info = serviceInfo ?: AccessibilityServiceInfo()
-        info.eventTypes = AccessibilityEvent.TYPES_ALL_MASK
+        info.eventTypes = AccessibilityEvent.TYPE_VIEW_FOCUSED or
+                AccessibilityEvent.TYPE_VIEW_CLICKED or
+                AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED
         info.feedbackType = AccessibilityServiceInfo.FEEDBACK_GENERIC
-        info.flags = info.flags or
-                AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS or
+        info.flags = AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS or
                 AccessibilityServiceInfo.FLAG_REPORT_VIEW_IDS
-        info.notificationTimeout = 50
+        info.notificationTimeout = 120
         serviceInfo = info
 
         initBubbleOverlay()
 
-        // Mostra subito la bolla se l'utente non ha impostato la modalità a comparsa esclusiva
+        // Mostra subito solo se l'utente ha scelto la modalità sempre visibile
         if (!prefs.showOnlyWhenFocused) {
             bubbleOverlay?.show()
         }
@@ -71,8 +105,7 @@ class FlowAccessibilityService : AccessibilityService() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
             ACTION_SHOW_BUBBLE -> {
-                ensureOverlayInitialized()
-                bubbleOverlay?.show()
+                triggerShowBubble()
             }
             ACTION_HIDE_BUBBLE -> {
                 bubbleOverlay?.hide()
@@ -82,8 +115,16 @@ class FlowAccessibilityService : AccessibilityService() {
     }
 
     fun triggerShowBubble() {
+        mainHandler.removeCallbacks(hideBubbleRunnable)
         ensureOverlayInitialized()
-        bubbleOverlay?.show()
+        bubbleOverlay?.show(force = true)
+    }
+
+    fun triggerHideBubble() {
+        mainHandler.removeCallbacks(hideBubbleRunnable)
+        if (bubbleOverlay?.currentState == BubbleState.IDLE) {
+            bubbleOverlay?.hide()
+        }
     }
 
     private fun initBubbleOverlay() {
@@ -101,33 +142,63 @@ class FlowAccessibilityService : AccessibilityService() {
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         if (event == null) return
+        // Ignora gli eventi generati dalla nostra stessa app o overlay
+        if (event.packageName == packageName) return
 
-        var sourceNode: AccessibilityNodeInfo? = null
-        var focusedNode: AccessibilityNodeInfo? = null
-
-        try {
-            sourceNode = event.source
-            val root = rootInActiveWindow
-            focusedNode = root?.findFocus(AccessibilityNodeInfo.FOCUS_INPUT)
-
-            val isEditableField = (sourceNode?.isEditable == true) || (focusedNode?.isEditable == true)
-
-            if (isEditableField) {
-                val target = if (sourceNode?.isEditable == true) sourceNode else focusedNode
-                if (target != null) {
+        when (event.eventType) {
+            AccessibilityEvent.TYPE_VIEW_FOCUSED,
+            AccessibilityEvent.TYPE_VIEW_CLICKED -> {
+                val source = event.source
+                if (source != null) {
                     try {
-                        activeTargetNode?.recycle()
-                        activeTargetNode = AccessibilityNodeInfo.obtain(target)
-                        currentContextText = getSanitizedFieldText(target).ifBlank { null }
-                    } catch (_: Exception) {}
+                        if (isLikelyInputField(source)) {
+                            mainHandler.removeCallbacks(hideBubbleRunnable)
+                            updateActiveTarget(source)
+                            ensureOverlayInitialized()
+                            if (prefs.showOnlyWhenFocused) {
+                                bubbleOverlay?.show()
+                            }
+                        } else {
+                            scheduleHideBubbleIfIdle()
+                        }
+                    } finally {
+                        try { source.recycle() } catch (_: Exception) {}
+                    }
                 }
-
-                ensureOverlayInitialized()
-                bubbleOverlay?.show()
             }
-        } catch (e: Exception) {
-            Log.e(TAG, "Errore onAccessibilityEvent: ${e.message}", e)
+
+            AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED -> {
+                mainHandler.removeCallbacks(checkWindowFocusRunnable)
+                mainHandler.postDelayed(checkWindowFocusRunnable, 150)
+            }
         }
+    }
+
+    private fun scheduleHideBubbleIfIdle() {
+        if (prefs.showOnlyWhenFocused && bubbleOverlay?.currentState == BubbleState.IDLE) {
+            mainHandler.removeCallbacks(hideBubbleRunnable)
+            mainHandler.postDelayed(hideBubbleRunnable, 350)
+        }
+    }
+
+    private fun isLikelyInputField(node: AccessibilityNodeInfo?): Boolean {
+        if (node == null) return false
+        if (node.isEditable) return true
+        val className = node.className?.toString() ?: return false
+        return className.contains("EditText", ignoreCase = true) ||
+                className.contains("AutoCompleteTextView", ignoreCase = true) ||
+                className.contains("SearchAutoComplete", ignoreCase = true) ||
+                className.contains("ExtractEditText", ignoreCase = true) ||
+                className.contains("TextField", ignoreCase = true) ||
+                className.contains("TextInput", ignoreCase = true)
+    }
+
+    private fun updateActiveTarget(node: AccessibilityNodeInfo) {
+        try {
+            activeTargetNode?.recycle()
+            activeTargetNode = AccessibilityNodeInfo.obtain(node)
+            currentContextText = getSanitizedFieldText(node).ifBlank { null }
+        } catch (_: Exception) {}
     }
 
     private fun ensureOverlayInitialized() {
@@ -178,42 +249,48 @@ class FlowAccessibilityService : AccessibilityService() {
 
     private fun insertTextIntoActiveField(newText: String) {
         var target = activeTargetNode
+        var needsRecycleTarget = false
+
         if (target == null || !target.isEditable) {
             val root = rootInActiveWindow
             target = root?.findFocus(AccessibilityNodeInfo.FOCUS_INPUT)
+            needsRecycleTarget = true
+            try { root?.recycle() } catch (_: Exception) {}
         }
 
         if (target == null || !target.isEditable) {
             copyToClipboard(newText)
+            if (needsRecycleTarget) {
+                try { target?.recycle() } catch (_: Exception) {}
+            }
             return
         }
 
-        // Filtra via l'eventuale hint placeholder prima di concatenare
-        val existingText = getSanitizedFieldText(target)
-        val finalText = if (existingText.isNotBlank()) {
-            if (existingText.endsWith(" ")) "$existingText$newText" else "$existingText $newText"
-        } else {
-            newText
-        }
+        try {
+            val existingText = getSanitizedFieldText(target)
+            val finalText = if (existingText.isNotBlank()) {
+                if (existingText.endsWith(" ")) "$existingText$newText" else "$existingText $newText"
+            } else {
+                newText
+            }
 
-        val arguments = Bundle().apply {
-            putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, finalText)
-        }
+            val arguments = Bundle().apply {
+                putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, finalText)
+            }
 
-        val success = target.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, arguments)
+            val success = target.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, arguments)
 
-        if (!success) {
-            // shortcut: fallback tramite Clipboard + ACTION_PASTE per campi custom o WebView
-            copyToClipboard(newText)
-            target.performAction(AccessibilityNodeInfo.ACTION_PASTE)
+            if (!success) {
+                copyToClipboard(newText)
+                target.performAction(AccessibilityNodeInfo.ACTION_PASTE)
+            }
+        } finally {
+            if (needsRecycleTarget) {
+                try { target.recycle() } catch (_: Exception) {}
+            }
         }
     }
 
-    /**
-     * Risolve il bug critico di WhatsApp/Telegram:
-     * Quando un campo è vuoto, AccessibilityNodeInfo.text spesso restituisce l'hint ("Message", "Messaggio").
-     * Questa funzione garantisce che l'hint venga riconosciuto come campo vuoto.
-     */
     private fun getSanitizedFieldText(node: AccessibilityNodeInfo?): String {
         if (node == null) return ""
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && node.isShowingHintText) {
@@ -225,7 +302,6 @@ class FlowAccessibilityService : AccessibilityService() {
             return ""
         }
 
-        // Riconoscimento placeholder noti
         val lower = text.lowercase()
         val placeholderKeywords = listOf(
             "message", "messaggio", "scrivi un messaggio", "scrivi un messaggio...",
@@ -271,9 +347,11 @@ class FlowAccessibilityService : AccessibilityService() {
 
     override fun onDestroy() {
         instance = null
-        bubbleOverlay?.hide()
+        mainHandler.removeCallbacksAndMessages(null)
+        bubbleOverlay?.destroy()
         audioRecorder.cancelRecording()
         try { activeTargetNode?.recycle() } catch (_: Exception) {}
+        activeTargetNode = null
         super.onDestroy()
     }
 

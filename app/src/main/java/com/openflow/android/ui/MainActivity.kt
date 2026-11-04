@@ -264,7 +264,7 @@ fun MainSettingsScreen(prefs: PreferencesManager, resumeTrigger: Int = 0) {
                                 val service = FlowAccessibilityService.instance
                                 if (service != null) {
                                     service.triggerShowBubble()
-                                    Toast.makeText(context, "Bolla attiva a schermo ✨", Toast.LENGTH_SHORT).show()
+                                    Toast.makeText(context, "Bolla attiva a schermo", Toast.LENGTH_SHORT).show()
                                 } else {
                                     Toast.makeText(
                                         context,
@@ -505,6 +505,8 @@ fun MainSettingsScreen(prefs: PreferencesManager, resumeTrigger: Int = 0) {
                             prefs.showOnlyWhenFocused = it
                             if (!it) {
                                 FlowAccessibilityService.instance?.triggerShowBubble()
+                            } else {
+                                FlowAccessibilityService.instance?.triggerHideBubble()
                             }
                         }
                     )
