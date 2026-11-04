@@ -1,13 +1,14 @@
 package com.openflow.android.service
 
 import android.accessibilityservice.AccessibilityService
+import android.accessibilityservice.AccessibilityServiceInfo
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.content.Intent
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
-import android.provider.Settings
 import android.util.Log
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
@@ -20,7 +21,6 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
-import java.io.File
 
 class FlowAccessibilityService : AccessibilityService() {
 
@@ -37,69 +37,93 @@ class FlowAccessibilityService : AccessibilityService() {
 
     override fun onCreate() {
         super.onCreate()
+        instance = this
         prefs = PreferencesManager(this)
         audioRecorder = AudioRecorderManager(this)
         aiClient = AiPipelineClient(prefs)
+        Log.d(TAG, "FlowAccessibilityService onCreate")
+    }
+
+    override fun onServiceConnected() {
+        super.onServiceConnected()
+        Log.d(TAG, "FlowAccessibilityService onServiceConnected!")
+
+        // Configurazione dinamica per intercettare tutti gli eventi finestra e input
+        serviceInfo = AccessibilityServiceInfo().apply {
+            eventTypes = AccessibilityEvent.TYPES_ALL_MASK
+            feedbackType = AccessibilityServiceInfo.FEEDBACK_GENERIC
+            flags = AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS or
+                    AccessibilityServiceInfo.FLAG_REPORT_VIEW_IDS
+            notificationTimeout = 50
+        }
 
         initBubbleOverlay()
+
+        // Mostra la bolla se l'utente ha scelto di averla sempre attiva o al primo avvio
+        if (!prefs.showOnlyWhenFocused) {
+            bubbleOverlay?.show()
+        }
+    }
+
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        when (intent?.action) {
+            ACTION_SHOW_BUBBLE -> {
+                ensureOverlayInitialized()
+                bubbleOverlay?.show()
+            }
+            ACTION_HIDE_BUBBLE -> {
+                bubbleOverlay?.hide()
+            }
+        }
+        return START_STICKY
+    }
+
+    fun triggerShowBubble() {
+        ensureOverlayInitialized()
+        bubbleOverlay?.show()
     }
 
     private fun initBubbleOverlay() {
-        if (!Settings.canDrawOverlays(this)) {
-            Log.w(TAG, "Permesso SYSTEM_ALERT_WINDOW non ancora concesso.")
-            return
+        if (bubbleOverlay == null) {
+            bubbleOverlay = FloatingBubbleOverlay(
+                context = this,
+                prefs = prefs,
+                onStartRecording = { handleStartRecording() },
+                onStopRecording = { handleStopRecording() },
+                onCancelRecording = { audioRecorder.cancelRecording() },
+                getAmplitude = { audioRecorder.getMaxAmplitude() }
+            )
         }
-
-        bubbleOverlay = FloatingBubbleOverlay(
-            context = this,
-            prefs = prefs,
-            onStartRecording = { handleStartRecording() },
-            onStopRecording = { handleStopRecording() },
-            onCancelRecording = { audioRecorder.cancelRecording() },
-            getAmplitude = { audioRecorder.getMaxAmplitude() }
-        )
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         if (event == null) return
 
-        when (event.eventType) {
-            AccessibilityEvent.TYPE_VIEW_FOCUSED,
-            AccessibilityEvent.TYPE_VIEW_CLICKED -> {
-                val node = event.source
-                if (node != null && node.isEditable) {
-                    activeTargetNode?.recycle()
-                    activeTargetNode = AccessibilityNodeInfo.obtain(node)
-                    currentContextText = node.text?.toString()
+        val source = event.source
+        val root = rootInActiveWindow
+        val focusedNode = root?.findFocus(AccessibilityNodeInfo.FOCUS_INPUT)
 
-                    if (prefs.showOnlyWhenFocused) {
-                        ensureOverlayInitialized()
-                        bubbleOverlay?.show()
-                    }
-                } else {
-                    if (prefs.showOnlyWhenFocused && bubbleOverlay?.currentState == BubbleState.IDLE) {
-                        mainHandler.postDelayed({
-                            // Chiudi la bolla solo se non siamo ancora su un campo editabile
-                            if (activeTargetNode == null || activeTargetNode?.isFocused == false) {
-                                bubbleOverlay?.hide()
-                            }
-                        }, 300)
-                    }
-                }
+        val isEditableField = (source?.isEditable == true) || (focusedNode?.isEditable == true)
+
+        if (isEditableField) {
+            val target = if (source?.isEditable == true) source else focusedNode
+            if (target != null) {
+                try {
+                    activeTargetNode?.recycle()
+                    activeTargetNode = AccessibilityNodeInfo.obtain(target)
+                    currentContextText = target.text?.toString()
+                } catch (_: Exception) {}
             }
 
-            AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED -> {
-                // Se la finestra cambia totalmente e siamo in IDLE, pulisci il nodo target
-                if (bubbleOverlay?.currentState == BubbleState.IDLE) {
-                    activeTargetNode?.recycle()
-                    activeTargetNode = null
-                }
+            if (prefs.showOnlyWhenFocused) {
+                ensureOverlayInitialized()
+                bubbleOverlay?.show()
             }
         }
     }
 
     private fun ensureOverlayInitialized() {
-        if (bubbleOverlay == null && Settings.canDrawOverlays(this)) {
+        if (bubbleOverlay == null) {
             initBubbleOverlay()
         }
     }
@@ -120,7 +144,7 @@ class FlowAccessibilityService : AccessibilityService() {
 
         serviceScope.launch {
             val response = aiClient.processSpeechToPolishedText(recordedFile, currentContextText)
-            recordedFile.delete() // pulizia file audio temporaneo
+            recordedFile.delete()
 
             response.onSuccess { polishedText ->
                 if (polishedText.isNotBlank()) {
@@ -130,23 +154,20 @@ class FlowAccessibilityService : AccessibilityService() {
                     bubbleOverlay?.updateState(BubbleState.IDLE)
                 }
             }.onFailure { error ->
-                Log.e(TAG, "Errore nella pipeline AI: ${error.message}", error)
+                Log.e(TAG, "Errore AI Pipeline: ${error.message}", error)
                 bubbleOverlay?.updateState(BubbleState.ERROR)
             }
         }
     }
 
     private fun insertTextIntoActiveField(newText: String) {
-        // Tenta prima il nodo precedentemente memorizzato
         var target = activeTargetNode
         if (target == null || !target.isEditable) {
-            // Se perso, cerca il nodo attualmente focalizzato nella finestra attiva
             val root = rootInActiveWindow
             target = root?.findFocus(AccessibilityNodeInfo.FOCUS_INPUT)
         }
 
         if (target == null || !target.isEditable) {
-            // Fallback: copia negli appunti se nessun target è raggiungibile
             copyToClipboard(newText)
             return
         }
@@ -183,13 +204,19 @@ class FlowAccessibilityService : AccessibilityService() {
     }
 
     override fun onDestroy() {
+        instance = null
         bubbleOverlay?.hide()
         audioRecorder.cancelRecording()
-        activeTargetNode?.recycle()
+        try { activeTargetNode?.recycle() } catch (_: Exception) {}
         super.onDestroy()
     }
 
     companion object {
         private const val TAG = "FlowAccessibilityService"
+        const val ACTION_SHOW_BUBBLE = "com.openflow.android.SHOW_BUBBLE"
+        const val ACTION_HIDE_BUBBLE = "com.openflow.android.HIDE_BUBBLE"
+
+        var instance: FlowAccessibilityService? = null
+            private set
     }
 }

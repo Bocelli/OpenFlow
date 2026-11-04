@@ -6,7 +6,6 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
-import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
 import android.view.accessibility.AccessibilityManager
@@ -88,7 +87,6 @@ fun OpenFlowTheme(content: @Composable () -> Unit) {
 fun MainSettingsScreen(prefs: PreferencesManager) {
     val context = LocalContext.current
 
-    // Stati reattivi
     var hasMicPermission by remember {
         mutableStateOf(ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED)
     }
@@ -114,7 +112,6 @@ fun MainSettingsScreen(prefs: PreferencesManager) {
     }
 
     LaunchedEffect(Unit) {
-        // Refresh permessi al ritorno a schermo
         hasOverlayPermission = Settings.canDrawOverlays(context)
         hasAccessibilityPermission = isAccessibilityServiceEnabled(context)
     }
@@ -169,6 +166,56 @@ fun MainSettingsScreen(prefs: PreferencesManager) {
                 .padding(horizontal = 18.dp),
             verticalArrangement = Arrangement.spacedBy(18.dp)
         ) {
+            // Sezione Test Immediato Bollicina
+            item {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = FlowSurfaceElevated),
+                    border = CardDefaults.outlinedCardBorder().copy(brush = Brush.horizontalGradient(listOf(FlowViolet, FlowVioletLight))),
+                    shape = RoundedCornerShape(16.dp)
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.PlayArrow, contentDescription = null, tint = FlowEmerald, modifier = Modifier.size(24.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Prova la Bolla Wispr Dark", fontWeight = FontWeight.Bold, color = FlowTextPrimary, fontSize = 16.sp)
+                        }
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(
+                            text = "Tocca il pulsante qui sotto per far apparire istantaneamente la bollicina fluttuante sul tuo schermo e testare microfono e animazioni.",
+                            color = FlowTextSecondary,
+                            fontSize = 13.sp
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Button(
+                            onClick = {
+                                if (!hasAccessibilityPermission) {
+                                    Toast.makeText(context, "Attiva prima il Servizio di Accessibilità OpenFlow in basso!", Toast.LENGTH_LONG).show()
+                                    context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+                                } else {
+                                    val service = FlowAccessibilityService.instance
+                                    if (service != null) {
+                                        service.triggerShowBubble()
+                                        Toast.makeText(context, "Bollicina mostrata sul bordo dello schermo!", Toast.LENGTH_SHORT).show()
+                                    } else {
+                                        val intent = Intent(context, FlowAccessibilityService::class.java).apply {
+                                            action = FlowAccessibilityService.ACTION_SHOW_BUBBLE
+                                        }
+                                        context.startService(intent)
+                                        Toast.makeText(context, "Avvio del servizio bollicina in corso...", Toast.LENGTH_SHORT).show()
+                                    }
+                                }
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = FlowViolet),
+                            shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("Mostra Bollicina Ora ✨", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                        }
+                    }
+                }
+            }
+
             // Sezione 1: Checklist Permessi
             item {
                 SectionHeader(title = "STATO PERMESSI")
@@ -180,15 +227,24 @@ fun MainSettingsScreen(prefs: PreferencesManager) {
                 ) {
                     Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         PermissionRow(
+                            title = "Accessibilità OpenFlow (Fondamentale)",
+                            desc = "Permette di mostrare la bolla sopra la tastiera e inserire il testo",
+                            isGranted = hasAccessibilityPermission,
+                            onClick = {
+                                context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+                            }
+                        )
+                        HorizontalDivider(color = FlowBorder.copy(alpha = 0.5f))
+                        PermissionRow(
                             title = "Microfono",
                             desc = "Per registrare la tua voce ad alta fedeltà",
                             isGranted = hasMicPermission,
                             onClick = { micLauncher.launch(Manifest.permission.RECORD_AUDIO) }
                         )
-                        Divider(color = FlowBorder.copy(alpha = 0.5f))
+                        HorizontalDivider(color = FlowBorder.copy(alpha = 0.5f))
                         PermissionRow(
-                            title = "Overlay Schermo",
-                            desc = "Per visualizzare la bollicina fluttuante sopra le app",
+                            title = "Overlay Schermo (Opzionale)",
+                            desc = "Consente alla bolla di sovrapporsi a tutte le app",
                             isGranted = hasOverlayPermission,
                             onClick = {
                                 val intent = Intent(
@@ -196,15 +252,6 @@ fun MainSettingsScreen(prefs: PreferencesManager) {
                                     Uri.parse("package:${context.packageName}")
                                 )
                                 context.startActivity(intent)
-                            }
-                        )
-                        Divider(color = FlowBorder.copy(alpha = 0.5f))
-                        PermissionRow(
-                            title = "Accessibilità",
-                            desc = "Per rilevare la tastiera e inserire il testo trascritto",
-                            isGranted = hasAccessibilityPermission,
-                            onClick = {
-                                context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
                             }
                         )
                     }
@@ -222,7 +269,6 @@ fun MainSettingsScreen(prefs: PreferencesManager) {
                     border = CardDefaults.outlinedCardBorder().copy(brush = Brush.verticalGradient(listOf(FlowBorder, FlowSurfaceElevated)))
                 ) {
                     Column(modifier = Modifier.padding(16.dp)) {
-                        // Switch Provider
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                             ProviderTab(
                                 title = "Groq (Consigliato)",
@@ -334,19 +380,22 @@ fun MainSettingsScreen(prefs: PreferencesManager) {
                         ) {
                             Column(modifier = Modifier.weight(1f)) {
                                 Text("A comparsa solo su campi testo", fontWeight = FontWeight.SemiBold, color = FlowTextPrimary, fontSize = 15.sp)
-                                Text("Nasconde la bollicina quando non stai digitando", color = FlowTextSecondary, fontSize = 12.sp)
+                                Text("Disattiva per mantenere la bolla sempre visibile sul bordo", color = FlowTextSecondary, fontSize = 12.sp)
                             }
                             Switch(
                                 checked = showOnlyWhenFocused,
                                 onCheckedChange = {
                                     showOnlyWhenFocused = it
                                     prefs.showOnlyWhenFocused = it
+                                    if (!it) {
+                                        FlowAccessibilityService.instance?.triggerShowBubble()
+                                    }
                                 },
                                 colors = SwitchDefaults.colors(checkedThumbColor = FlowVioletLight, checkedTrackColor = FlowViolet.copy(alpha = 0.5f))
                             )
                         }
 
-                        Divider(color = FlowBorder.copy(alpha = 0.5f))
+                        HorizontalDivider(color = FlowBorder.copy(alpha = 0.5f))
 
                         Row(
                             modifier = Modifier.fillMaxWidth(),
@@ -416,7 +465,7 @@ fun PermissionRow(title: String, desc: String, isGranted: Boolean, onClick: () -
                 shape = RoundedCornerShape(8.dp),
                 contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
             ) {
-                Text("Concedi", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                Text("Attiva", fontSize = 12.sp, fontWeight = FontWeight.Bold)
             }
         }
     }

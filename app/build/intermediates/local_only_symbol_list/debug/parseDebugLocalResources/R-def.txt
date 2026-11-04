@@ -1,0 +1,16 @@
+R_DEF: Internal format may change without notice
+local
+color flow_black
+color flow_border
+color flow_emerald
+color flow_surface
+color flow_surface_elevated
+color flow_text_primary
+color flow_text_secondary
+color flow_violet
+color flow_violet_glow
+drawable ic_launcher
+string accessibility_service_description
+string app_name
+style Theme.OpenFlow
+xml accessibility_service_config
