@@ -18,6 +18,7 @@ import com.openflow.android.ai.AiPipelineClient
 import com.openflow.android.ai.PipelineOutput
 import com.openflow.android.audio.AudioRecorderManager
 import com.openflow.android.data.PreferencesManager
+import com.openflow.android.island.HyperOsIslandManager
 import com.openflow.android.ui.BubbleState
 import com.openflow.android.ui.FloatingBubbleOverlay
 import kotlinx.coroutines.CancellationException
@@ -35,7 +36,28 @@ class FlowAccessibilityService : AccessibilityService() {
     private lateinit var prefs: PreferencesManager
     private lateinit var audioRecorder: AudioRecorderManager
     private lateinit var aiClient: AiPipelineClient
+    private lateinit var hyperOsIslandManager: HyperOsIslandManager
     private var bubbleOverlay: FloatingBubbleOverlay? = null
+
+    private var islandRecordingSeconds = 0
+    private val islandTickerRunnable = object : Runnable {
+        override fun run() {
+            islandRecordingSeconds++
+            hyperOsIslandManager.showRecording(islandRecordingSeconds)
+            mainHandler.postDelayed(this, 1000)
+        }
+    }
+
+    private fun startIslandTimer() {
+        islandRecordingSeconds = 0
+        mainHandler.removeCallbacks(islandTickerRunnable)
+        hyperOsIslandManager.showRecording(0)
+        mainHandler.postDelayed(islandTickerRunnable, 1000)
+    }
+
+    private fun stopIslandTimer() {
+        mainHandler.removeCallbacks(islandTickerRunnable)
+    }
 
     private var activeTargetNode: AccessibilityNodeInfo? = null
 
@@ -76,6 +98,7 @@ class FlowAccessibilityService : AccessibilityService() {
         prefs = PreferencesManager(this)
         audioRecorder = AudioRecorderManager(this)
         aiClient = AiPipelineClient(prefs)
+        hyperOsIslandManager = HyperOsIslandManager(this)
         showOngoingNotification()
         Log.d(TAG, "FlowAccessibilityService onCreate")
     }
@@ -133,6 +156,8 @@ class FlowAccessibilityService : AccessibilityService() {
                 onStartRecording = { handleStartRecording() },
                 onStopRecording = { handleStopRecording() },
                 onCancelRecording = {
+                    stopIslandTimer()
+                    hyperOsIslandManager.dismiss()
                     stopAudioRecordService()
                     audioRecorder.cancelRecording()
                 },
@@ -300,14 +325,21 @@ class FlowAccessibilityService : AccessibilityService() {
         val result = audioRecorder.startRecording()
         if (result.isFailure) {
             stopAudioRecordService()
+            stopIslandTimer()
+            hyperOsIslandManager.showError("Microfono non disponibile")
             bubbleOverlay?.updateState(BubbleState.ERROR)
+        } else {
+            startIslandTimer()
         }
     }
 
     private fun handleStopRecording() {
         stopAudioRecordService()
+        stopIslandTimer()
+        hyperOsIslandManager.showProcessing()
         val recordedFile = audioRecorder.stopRecording()
         if (recordedFile == null || !recordedFile.exists()) {
+            hyperOsIslandManager.showError("Audio vuoto")
             bubbleOverlay?.updateState(BubbleState.ERROR)
             return
         }
@@ -332,7 +364,13 @@ class FlowAccessibilityService : AccessibilityService() {
 
                 if (output.text.isBlank()) {
                     // Gemini fallito (nessun testo) oppure registrazione vuota
-                    bubbleOverlay?.updateState(if (output.errorMessage != null) BubbleState.ERROR else BubbleState.IDLE)
+                    if (output.errorMessage != null) {
+                        hyperOsIslandManager.showError("Errore IA")
+                        bubbleOverlay?.updateState(BubbleState.ERROR)
+                    } else {
+                        hyperOsIslandManager.dismiss()
+                        bubbleOverlay?.updateState(BubbleState.IDLE)
+                    }
                     return@onSuccess
                 }
 
@@ -341,6 +379,7 @@ class FlowAccessibilityService : AccessibilityService() {
                 insertTextIntoActiveField(
                     if (output.isFallback) "[⚠️ Fallback Whisper: LLM non disponibile]\n\n${output.text}" else output.text
                 )
+                hyperOsIslandManager.showSuccess()
                 bubbleOverlay?.updateState(BubbleState.SUCCESS)
                 try {
                     com.openflow.android.data.TranscriptionHistoryManager(this@FlowAccessibilityService).add(
@@ -352,6 +391,7 @@ class FlowAccessibilityService : AccessibilityService() {
             }.onFailure { error ->
                 Log.e(TAG, "Errore AI Pipeline: ${error.message}", error)
                 showNotificationAlert("❌ OpenFlow: Errore Registrazione/AI", error.message ?: "Errore sconosciuto")
+                hyperOsIslandManager.showError(error.message ?: "Errore")
                 bubbleOverlay?.updateState(BubbleState.ERROR)
             }
         }
@@ -571,6 +611,8 @@ class FlowAccessibilityService : AccessibilityService() {
     }
 
     override fun onInterrupt() {
+        stopIslandTimer()
+        hyperOsIslandManager.dismiss()
         bubbleOverlay?.hide()
         audioRecorder.cancelRecording()
         stopAudioRecordService()
@@ -580,6 +622,8 @@ class FlowAccessibilityService : AccessibilityService() {
         instance = null
         serviceScope.cancel()
         mainHandler.removeCallbacksAndMessages(null)
+        stopIslandTimer()
+        hyperOsIslandManager.dismiss()
         bubbleOverlay?.destroy()
         audioRecorder.cancelRecording()
         stopAudioRecordService()
