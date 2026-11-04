@@ -51,12 +51,17 @@ class FlowAccessibilityService : AccessibilityService() {
         // Se c'è ancora un campo di testo focalizzato, non nascondere
         val activeInput = findActiveFocusedInput()
         if (activeInput != null) {
-            Log.d(TAG, "hideBubble annullato: campo ancora focalizzato")
-            updateActiveTarget(activeInput)
+            val activeCls = activeInput.className?.toString() ?: ""
+            val activePkg = activeInput.packageName?.toString()?.lowercase() ?: ""
+            if (isNodeInputCapable(activeInput, activeCls, activePkg)) {
+                Log.d(TAG, "hideBubble annullato: campo ancora focalizzato ($activePkg, $activeCls)")
+                updateActiveTarget(activeInput)
+                activeInput.recycle()
+                bubbleOverlay?.wakeUpFromStealth()
+                bubbleOverlay?.cancelStealth()
+                return@Runnable
+            }
             activeInput.recycle()
-            bubbleOverlay?.wakeUpFromStealth()
-            bubbleOverlay?.cancelStealth()
-            return@Runnable
         }
 
         Log.d(TAG, "hideBubble confermato: nessun input o tastiera attiva")
@@ -92,7 +97,11 @@ class FlowAccessibilityService : AccessibilityService() {
         serviceInfo = info
 
         initBubbleOverlay()
-        bubbleOverlay?.show(force = true)
+        if (prefs.showOnlyWhenFocused) {
+            scheduleHideBubbleIfIdle(delayMs = 700)
+        } else {
+            bubbleOverlay?.show(force = true)
+        }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -141,6 +150,7 @@ class FlowAccessibilityService : AccessibilityService() {
         val source = event.source
 
         try {
+            Log.d(TAG, "onEvent: type=${event.eventType}, pkg=$pkg, cls=$cls")
             ensureOverlayInitialized()
 
             val keyboardOpen = isKeyboardVisible()
@@ -151,11 +161,18 @@ class FlowAccessibilityService : AccessibilityService() {
             }
 
             var hasActiveInput = eventIsInput || keyboardOpen
-            if (!hasActiveInput) {
+            // Se l'evento proviene dal launcher desktop o dalla schermata di blocco/tendina di sistema,
+            // non cerchiamo focus residui di app lasciate aperte in background.
+            val isSystemOrLauncher = pkg.contains("launcher") || pkg.contains("globallauncher") || pkg.contains("systemui")
+            if (!hasActiveInput && !isSystemOrLauncher) {
                 val activeInput = findActiveFocusedInput()
                 if (activeInput != null) {
-                    hasActiveInput = true
-                    updateActiveTarget(activeInput)
+                    val activeCls = activeInput.className?.toString() ?: ""
+                    val activePkg = activeInput.packageName?.toString()?.lowercase() ?: ""
+                    if (isNodeInputCapable(activeInput, activeCls, activePkg)) {
+                        hasActiveInput = true
+                        updateActiveTarget(activeInput)
+                    }
                     activeInput.recycle()
                 }
             }
@@ -195,9 +212,12 @@ class FlowAccessibilityService : AccessibilityService() {
         return try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
                 val tempRect = android.graphics.Rect()
-                windows.any { window ->
+                val winList = windows
+                Log.d(TAG, "isKeyboardVisible: windows count=${winList.size}")
+                winList.any { window ->
+                    window.getBoundsInScreen(tempRect)
+                    Log.d(TAG, "window: type=${window.type}, bounds=$tempRect")
                     if (window.type == AccessibilityWindowInfo.TYPE_INPUT_METHOD) {
-                        window.getBoundsInScreen(tempRect)
                         tempRect.height() > 100
                     } else {
                         false
@@ -206,7 +226,8 @@ class FlowAccessibilityService : AccessibilityService() {
             } else {
                 false
             }
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            Log.e(TAG, "isKeyboardVisible error: ${e.message}")
             false
         }
     }
@@ -221,19 +242,12 @@ class FlowAccessibilityService : AccessibilityService() {
         }
         if (source == null) return false
 
-        if (source.isEditable) return true
-
-        if (cls.contains("EditText", ignoreCase = true) ||
-            cls.contains("TextField", ignoreCase = true) ||
-            cls.contains("AutoComplete", ignoreCase = true) ||
-            cls.contains("Search", ignoreCase = true) ||
-            cls.contains("Input", ignoreCase = true) ||
-            cls.contains("Compose", ignoreCase = true) ||
-            cls.contains("Editor", ignoreCase = true) ||
-            cls.contains("WebView", ignoreCase = true)
-        ) {
-            return true
+        // Evita categoricamente falsi positivi da desktop/widget del launcher e tendina di sistema
+        if (pkg.contains("launcher") || pkg.contains("globallauncher") || pkg.contains("systemui")) {
+            if (!source.isEditable) return false
         }
+
+        if (source.isEditable) return true
 
         try {
             val actions = source.actionList
@@ -242,37 +256,37 @@ class FlowAccessibilityService : AccessibilityService() {
             }
         } catch (_: Exception) {}
 
+        if (cls.contains("EditText", ignoreCase = true) ||
+            cls.contains("TextField", ignoreCase = true) ||
+            cls.contains("AutoComplete", ignoreCase = true) ||
+            cls.contains("ExtractEditText", ignoreCase = true)
+        ) {
+            return true
+        }
+
         return false
     }
 
     /**
-     * Cerca un campo con focus di input attivo su tutte le finestre visibili a schermo.
+     * Cerca un campo con focus di input attivo SOLO nella finestra in primo piano (attiva).
+     * Evita rigorosamente di agganciare campi di testo di app rimaste in background quando l'utente è nella Home.
      */
     private fun findActiveFocusedInput(): AccessibilityNodeInfo? {
         try {
-            val globalFocus = findFocus(AccessibilityNodeInfo.FOCUS_INPUT)
-            if (globalFocus != null) return globalFocus
-        } catch (_: Exception) {}
+            val root = rootInActiveWindow ?: return null
+            val rootPkg = root.packageName?.toString()?.lowercase() ?: ""
 
-        try {
-            val root = rootInActiveWindow
-            if (root != null) {
-                val input = root.findFocus(AccessibilityNodeInfo.FOCUS_INPUT)
+            // Se l'utente è sulla schermata Home (launcher) o sulla schermata di blocco/tendina,
+            // nessun campo di testo è attivo per la scrittura.
+            if (rootPkg.contains("launcher") || rootPkg.contains("globallauncher") || rootPkg.contains("systemui")) {
                 root.recycle()
-                if (input != null) return input
+                return null
             }
-        } catch (_: Exception) {}
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-            try {
-                for (window in windows) {
-                    val root = window.root ?: continue
-                    val input = root.findFocus(AccessibilityNodeInfo.FOCUS_INPUT)
-                    root.recycle()
-                    if (input != null) return input
-                }
-            } catch (_: Exception) {}
-        }
+            val input = root.findFocus(AccessibilityNodeInfo.FOCUS_INPUT)
+            root.recycle()
+            if (input != null) return input
+        } catch (_: Exception) {}
 
         return null
     }
