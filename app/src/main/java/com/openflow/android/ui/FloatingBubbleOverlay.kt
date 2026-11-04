@@ -643,7 +643,7 @@ class FloatingBubbleOverlay(
             val now = SystemClock.uptimeMillis()
             val pulse = (sin((now % 1200) / 1200.0 * 2.0 * Math.PI) * 0.5 + 0.5).toFloat()
 
-            // 1. Alone luminoso attorno al notch durante la registrazione
+            // 1. Alone luminoso attorno al notch durante la registrazione o in idle
             if (state == BubbleState.RECORDING) {
                 val haloInset = inset - dpToPx(1.5f + 2f * pulse)
                 val haloRect = RectF(haloInset, haloInset, w - haloInset, h - haloInset)
@@ -654,6 +654,13 @@ class FloatingBubbleOverlay(
                     haloPaint.color = Color.argb((35 + 40 * pulse).toInt(), 56, 189, 248) // Sky blue
                 }
                 canvas.drawRoundRect(haloRect, haloRadius, haloRadius, haloPaint)
+            } else if (state == BubbleState.IDLE) {
+                // Sottile aura al neon che rende immediatamente riconoscibile il cerchio attorno al punch-hole
+                val idleHaloInset = inset - dpToPx(1.6f)
+                val idleHaloRect = RectF(idleHaloInset, idleHaloInset, w - idleHaloInset, h - idleHaloInset)
+                val idleHaloRadius = idleHaloRect.height() / 2f
+                haloPaint.color = Color.argb(45, 56, 189, 248) // Alone ciano traslucido
+                canvas.drawRoundRect(idleHaloRect, idleHaloRadius, idleHaloRadius, haloPaint)
             }
 
             // 2. Sfondo Pillola Nero Assoluto OLED
@@ -662,11 +669,26 @@ class FloatingBubbleOverlay(
 
             // 3. Bordo rifinito
             when (state) {
-                BubbleState.RECORDING -> borderPaint.color = if (isCancelCandidate) Color.parseColor("#EF4444") else Color.parseColor("#38BDF8")
-                BubbleState.PROCESSING -> borderPaint.color = Color.parseColor("#818CF8")
-                BubbleState.SUCCESS -> borderPaint.color = Color.parseColor("#10B981")
-                BubbleState.ERROR -> borderPaint.color = Color.parseColor("#EF4444")
-                BubbleState.IDLE -> borderPaint.color = Color.parseColor("#27272A")
+                BubbleState.RECORDING -> {
+                    borderPaint.strokeWidth = dpToPx(1.6f).toFloat()
+                    borderPaint.color = if (isCancelCandidate) Color.parseColor("#EF4444") else Color.parseColor("#38BDF8")
+                }
+                BubbleState.PROCESSING -> {
+                    borderPaint.strokeWidth = dpToPx(1.6f).toFloat()
+                    borderPaint.color = Color.parseColor("#818CF8")
+                }
+                BubbleState.SUCCESS -> {
+                    borderPaint.strokeWidth = dpToPx(1.6f).toFloat()
+                    borderPaint.color = Color.parseColor("#10B981")
+                }
+                BubbleState.ERROR -> {
+                    borderPaint.strokeWidth = dpToPx(1.6f).toFloat()
+                    borderPaint.color = Color.parseColor("#EF4444")
+                }
+                BubbleState.IDLE -> {
+                    borderPaint.strokeWidth = dpToPx(1.8f).toFloat()
+                    borderPaint.color = Color.parseColor("#38BDF8") // Vivid Sky Blue Neon Ring
+                }
             }
             canvas.drawRoundRect(rect, radius, radius, borderPaint)
 
