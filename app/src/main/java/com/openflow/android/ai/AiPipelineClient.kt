@@ -142,7 +142,7 @@ class AiPipelineClient(private val prefs: PreferencesManager) {
                         put("role", "user")
                         put("parts", JSONArray().apply {
                             put(JSONObject().apply {
-                                put("text", "Trascrivi e formatta il parlato contenuto in questa registrazione secondo le istruzioni del sistema: dividi in paragrafi ariosi (\\n\\n), usa le virgolette caporali «...» per i nomi di progetti o app, sistema la punteggiatura spezzando le frasi lunghe, ed elimina rigorosamente tutti gli intercalari ed esitazioni orali (es. 'praticamente', 'e praticamente', 'diciamo'). Scrivi correttamente i brand (Groq, OpenAI, Gemini, Flash-Lite, Antigravity, OpenFlow). Restituisci ESCLUSIVAMENTE il testo finale elaborato pronto da inviare.")
+                                put("text", "Trascrivi e formatta il parlato contenuto in questa registrazione secondo le istruzioni del sistema: raggruppa le frasi in paragrafi coesi e solidi (NON spezzettare ogni frase a capo), usa le virgolette caporali «...» per i nomi di progetti o app, sistema la punteggiatura con ritmo naturale ed espressivo, ed elimina rigorosamente gli intercalari ed esitazioni orali (es. 'praticamente', 'e praticamente', 'diciamo'). Scrivi correttamente i brand e modelli hardware (Groq, OpenAI, Gemini, Flash-Lite, Antigravity, OpenFlow). Restituisci ESCLUSIVAMENTE il testo finale elaborato pronto da inviare.")
                             })
                             put(JSONObject().apply {
                                 put("inline_data", JSONObject().apply {
