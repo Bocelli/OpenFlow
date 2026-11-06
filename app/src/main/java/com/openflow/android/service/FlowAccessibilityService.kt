@@ -93,12 +93,11 @@ class FlowAccessibilityService : AccessibilityService() {
                 AccessibilityEvent.TYPE_VIEW_TEXT_SELECTION_CHANGED or
                 AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED or
                 AccessibilityEvent.TYPE_VIEW_TEXT_CHANGED or
-                AccessibilityEvent.TYPE_WINDOWS_CHANGED or
-                AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED
+                AccessibilityEvent.TYPE_WINDOWS_CHANGED
         info.feedbackType = AccessibilityServiceInfo.FEEDBACK_GENERIC
         info.flags = AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS or
                 AccessibilityServiceInfo.FLAG_REPORT_VIEW_IDS
-        info.notificationTimeout = 40
+        info.notificationTimeout = 100
         serviceInfo = info
 
         initBubbleOverlay()
@@ -166,7 +165,9 @@ class FlowAccessibilityService : AccessibilityService() {
         try {
             ensureOverlayInitialized()
 
-            val keyboardOpen = isKeyboardVisible()
+            val isWindowChangeEvent = event.eventType == AccessibilityEvent.TYPE_WINDOWS_CHANGED ||
+                    event.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED
+            val keyboardOpen = isKeyboardVisible(forceRefresh = isWindowChangeEvent)
             val eventIsInput = isNodeInputCapable(source, cls, pkg)
 
             if (eventIsInput && source != null) {
@@ -216,20 +217,35 @@ class FlowAccessibilityService : AccessibilityService() {
         mainHandler.postDelayed(hideBubbleRunnable, delayMs)
     }
 
+    private var cachedKeyboardVisible: Boolean = false
+    private var lastKeyboardCheckTimeMs: Long = 0L
+
     /**
      * Rileva se la finestra della tastiera software (IME) è presente e aperta a schermo.
-     * Metodo a prova di bomba valido su qualsiasi versione Android e OEM (Xiaomi, Samsung, Pixel).
+     * Con throttling a 300ms e ciclo ad interruzione rapida per azzerare il carico IPC su Binder e HyperOS.
      */
-    private fun isKeyboardVisible(): Boolean {
+    private fun isKeyboardVisible(forceRefresh: Boolean = false): Boolean {
+        val now = System.currentTimeMillis()
+        if (!forceRefresh && (now - lastKeyboardCheckTimeMs < 300L)) {
+            return cachedKeyboardVisible
+        }
+        lastKeyboardCheckTimeMs = now
         return try {
             val tempRect = android.graphics.Rect()
-            windows.any { window ->
+            val windowList = windows
+            var found = false
+            for (window in windowList) {
                 window.getBoundsInScreen(tempRect)
-                window.type == AccessibilityWindowInfo.TYPE_INPUT_METHOD && tempRect.height() > 100
+                if (window.type == AccessibilityWindowInfo.TYPE_INPUT_METHOD && tempRect.height() > 100) {
+                    found = true
+                    break
+                }
             }
+            cachedKeyboardVisible = found
+            found
         } catch (e: Exception) {
             Log.e(TAG, "isKeyboardVisible error: ${e.message}")
-            false
+            cachedKeyboardVisible
         }
     }
 
@@ -640,6 +656,41 @@ class FlowAccessibilityService : AccessibilityService() {
         }
     }
 
+    override fun onUnbind(intent: Intent?): Boolean {
+        Log.w(TAG, "FlowAccessibilityService onUnbind - abilitazione flag rebind per ripristino automatico")
+        instance = null
+        mainHandler.removeCallbacksAndMessages(null)
+        bubbleOverlay?.hide()
+        return true // Restituire true permette al sistema Android di invocare onRebind() senza errori
+    }
+
+    override fun onRebind(intent: Intent?) {
+        super.onRebind(intent)
+        instance = this
+        Log.i(TAG, "FlowAccessibilityService onRebind - riconnessione riuscita")
+        showOngoingNotification()
+        ensureOverlayInitialized()
+        if (!prefs.showOnlyWhenFocused) {
+            bubbleOverlay?.show()
+        }
+    }
+
+    override fun onTrimMemory(level: Int) {
+        super.onTrimMemory(level)
+        Log.i(TAG, "onTrimMemory ricevuto: level=$level (alleggerimento risorse per fotocamera/multitasking)")
+        if (level >= TRIM_MEMORY_MODERATE) {
+            try { activeTargetNode?.recycle() } catch (_: Exception) {}
+            activeTargetNode = null
+        }
+    }
+
+    override fun onLowMemory() {
+        super.onLowMemory()
+        Log.w(TAG, "onLowMemory ricevuto: pulizia cache target")
+        try { activeTargetNode?.recycle() } catch (_: Exception) {}
+        activeTargetNode = null
+    }
+
     override fun onDestroy() {
         instance = null
         currentProcessingJob?.cancel()
@@ -661,5 +712,54 @@ class FlowAccessibilityService : AccessibilityService() {
 
         var instance: FlowAccessibilityService? = null
             private set
+
+        /**
+         * Riavvia/riconnette chirurgicamente il servizio di accessibilità se l'app possiede
+         * il permesso WRITE_SECURE_SETTINGS (concesso ad es. tramite ADB).
+         * Risolve automaticamente il problema di HyperOS/MIUI "Servizio andato in errore".
+         */
+        fun restartAccessibilityServiceIfPermitted(context: Context): Boolean {
+            val hasPermission = context.checkSelfPermission(android.Manifest.permission.WRITE_SECURE_SETTINGS) ==
+                    android.content.pm.PackageManager.PERMISSION_GRANTED
+            if (!hasPermission) return false
+
+            return try {
+                val serviceComponent = "${context.packageName}/${FlowAccessibilityService::class.java.canonicalName}"
+                val currentSetting = android.provider.Settings.Secure.getString(
+                    context.contentResolver,
+                    android.provider.Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES
+                ) ?: ""
+
+                // 1. Rimuove il servizio per pulire lo stato di errore/crashed da AccessibilityManager
+                val filteredSetting = currentSetting.split(":")
+                    .filter { it.isNotBlank() && it != serviceComponent }
+                    .joinToString(":")
+
+                android.provider.Settings.Secure.putString(
+                    context.contentResolver,
+                    android.provider.Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES,
+                    filteredSetting
+                )
+
+                // 2. Lo reinserisce dopo 350ms per forzare il re-bind pulito
+                android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                    val newSetting = if (filteredSetting.isBlank()) serviceComponent else "$filteredSetting:$serviceComponent"
+                    android.provider.Settings.Secure.putString(
+                        context.contentResolver,
+                        android.provider.Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES,
+                        newSetting
+                    )
+                    android.provider.Settings.Secure.putString(
+                        context.contentResolver,
+                        android.provider.Settings.Secure.ACCESSIBILITY_ENABLED,
+                        "1"
+                    )
+                }, 350L)
+                true
+            } catch (e: Exception) {
+                Log.e(TAG, "Errore durante auto-restart del servizio: ${e.message}")
+                false
+            }
+        }
     }
 }

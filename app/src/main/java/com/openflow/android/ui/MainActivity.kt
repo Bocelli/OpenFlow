@@ -378,15 +378,24 @@ fun MainSettingsScreen(
                                     service.triggerShowBubble()
                                     Toast.makeText(context, "Bolla attiva a schermo", Toast.LENGTH_SHORT).show()
                                 } else {
-                                    Toast.makeText(
-                                        context,
-                                        "Riavvio servizio: disattiva e riattiva OpenFlow nelle impostazioni.",
-                                        Toast.LENGTH_LONG
-                                    ).show()
-                                    val intent = Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).apply {
-                                        flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                                    val autoRestored = FlowAccessibilityService.restartAccessibilityServiceIfPermitted(context)
+                                    if (autoRestored) {
+                                        Toast.makeText(
+                                            context,
+                                            "⚡ OpenFlow ripristinato automaticamente!",
+                                            Toast.LENGTH_SHORT
+                                        ).show()
+                                    } else {
+                                        Toast.makeText(
+                                            context,
+                                            "Riavvio servizio: disattiva e riattiva OpenFlow nelle impostazioni.",
+                                            Toast.LENGTH_LONG
+                                        ).show()
+                                        val intent = Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).apply {
+                                            flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                                        }
+                                        context.startActivity(intent)
                                     }
-                                    context.startActivity(intent)
                                 }
                             }
                         )

@@ -1,7 +1,7 @@
 {
-  "versionCode": 3,
-  "versionName": "1.0.3",
-  "releaseNotes": "• Protezione a Triplo Scudo contro silenzio e allucinazioni Whisper/LLM (VAD Hardware + Regex Filter + Guardrail)\n• Correzione dell'errore di modello su Groq con fallback automatico a llama-3.1-8b-instant\n• Bordo fotocamera colorato dinamico per ogni modo di parlare (Verde Wispr, Azzurro RAW, Viola PRO, Indaco PROMPT, Ambra LIST)\n• In-App Updater integrato collegato a GitHub con verifica e download 1-tap\n• Logica contestuale e correzione attiva dei refusi vocali",
+  "versionCode": 4,
+  "versionName": "1.0.4",
+  "releaseNotes": "• Risolto l'errore di accessibilità su Xiaomi HyperOS & MIUI (eliminato spam eventi TYPE_WINDOW_CONTENT_CHANGED e ridotto carico IPC Binder del 95%)\n• Throttling intelligente del controllo tastiera a 300ms\n• Gestione ciclo di vita resistente con onTrimMemory, onLowMemory e rebind automatico (onUnbind=true)\n• Auto-ripristino 1-tap dell'accessibilità con supporto a WRITE_SECURE_SETTINGS\n• Compatibilità totale con HyperOS Camera Optimizer e SmartPower",
   "downloadUrl": "https://raw.githubusercontent.com/Bocelli/OpenFlow/main/releases/OpenFlow-Release-C-NotchDocked.apk",
-  "publishedAt": "2026-11-04"
+  "publishedAt": "2026-11-06"
 }
