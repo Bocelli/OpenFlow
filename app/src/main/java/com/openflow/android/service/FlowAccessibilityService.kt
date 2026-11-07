@@ -71,6 +71,23 @@ class FlowAccessibilityService : AccessibilityService() {
         bubbleOverlay?.hide()
     }
 
+    private val screenStateReceiver = object : android.content.BroadcastReceiver() {
+        override fun onReceive(context: android.content.Context?, intent: android.content.Intent?) {
+            when (intent?.action) {
+                android.content.Intent.ACTION_SCREEN_OFF -> {
+                    Log.d(TAG, "Screen OFF ricevuto: disattivazione overlay per risparmio energetico e prevenzione timeout display")
+                    mainHandler.removeCallbacks(hideBubbleRunnable)
+                    bubbleOverlay?.onScreenOff()
+                }
+                android.content.Intent.ACTION_SCREEN_ON, android.content.Intent.ACTION_USER_PRESENT -> {
+                    Log.d(TAG, "Screen ON / USER_PRESENT ricevuto: riattivazione overlay")
+                    ensureOverlayInitialized()
+                    bubbleOverlay?.onScreenOn()
+                }
+            }
+        }
+    }
+
     override fun onCreate() {
         super.onCreate()
         instance = this
@@ -78,7 +95,14 @@ class FlowAccessibilityService : AccessibilityService() {
         audioRecorder = AudioRecorderManager(this)
         aiClient = AiPipelineClient(prefs)
         showOngoingNotification()
-        Log.d(TAG, "FlowAccessibilityService onCreate")
+
+        val filter = android.content.IntentFilter().apply {
+            addAction(android.content.Intent.ACTION_SCREEN_OFF)
+            addAction(android.content.Intent.ACTION_SCREEN_ON)
+            addAction(android.content.Intent.ACTION_USER_PRESENT)
+        }
+        registerReceiver(screenStateReceiver, filter)
+        Log.d(TAG, "FlowAccessibilityService onCreate con screenStateReceiver attivo")
     }
 
     override fun onServiceConnected() {
@@ -693,6 +717,9 @@ class FlowAccessibilityService : AccessibilityService() {
 
     override fun onDestroy() {
         instance = null
+        try {
+            unregisterReceiver(screenStateReceiver)
+        } catch (_: Exception) {}
         currentProcessingJob?.cancel()
         currentProcessingJob = null
         serviceScope.cancel()

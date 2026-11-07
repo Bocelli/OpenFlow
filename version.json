@@ -1,7 +1,7 @@
 {
-  "versionCode": 4,
-  "versionName": "1.0.4",
-  "releaseNotes": "• Risolto l'errore di accessibilità su Xiaomi HyperOS & MIUI (eliminato spam eventi TYPE_WINDOW_CONTENT_CHANGED e ridotto carico IPC Binder del 95%)\n• Throttling intelligente del controllo tastiera a 300ms\n• Gestione ciclo di vita resistente con onTrimMemory, onLowMemory e rebind automatico (onUnbind=true)\n• Auto-ripristino 1-tap dell'accessibilità con supporto a WRITE_SECURE_SETTINGS\n• Compatibilità totale con HyperOS Camera Optimizer e SmartPower",
+  "versionCode": 5,
+  "versionName": "1.0.5",
+  "releaseNotes": "• Risoluzione definitiva crash HyperOS a schermo spento: adozione di TYPE_APPLICATION_OVERLAY per eliminare i timeout di AccessibilityManagerService\n• Gestione ciclo schermo con ricevitore SCREEN_OFF e USER_PRESENT (sospensione a schermo spento e ripristino istantaneo allo sblocco)\n• Watchdog silente BootAndUnlockReceiver per auto-ripristino trasparente in background\n• Stabilità continua garantita anche dopo ore di standby prolungato",
   "downloadUrl": "https://raw.githubusercontent.com/Bocelli/OpenFlow/main/releases/OpenFlow-Release-C-NotchDocked.apk",
-  "publishedAt": "2026-11-06"
+  "publishedAt": "2026-11-07"
 }

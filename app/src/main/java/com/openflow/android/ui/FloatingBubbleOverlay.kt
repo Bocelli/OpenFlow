@@ -224,7 +224,17 @@ class FloatingBubbleOverlay(
     private fun initWindow() {
         if (isViewAttached) return
 
-        val windowType = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+        val hasOverlayPermission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            android.provider.Settings.canDrawOverlays(context)
+        } else {
+            true
+        }
+
+        // Se l'app possiede SYSTEM_ALERT_WINDOW, usa TYPE_APPLICATION_OVERLAY per svincolare l'overlay
+        // dalla gestione interna di AccessibilityManagerService, azzerando i timeout IPC e i crash su HyperOS.
+        val windowType = if (hasOverlayPermission && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
+        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY
         } else {
             @Suppress("DEPRECATION")
@@ -271,6 +281,22 @@ class FloatingBubbleOverlay(
             } catch (e2: Exception) {
                 Log.e(TAG, "Errore fallback addView: ${e2.message}", e2)
             }
+        }
+    }
+
+    fun onScreenOff() {
+        handler.removeCallbacks(amplitudePollingRunnable)
+        handler.removeCallbacks(longPressRunnable)
+        handler.removeCallbacks(stealthDimRunnable)
+        handler.removeCallbacks(singleTapRunnable)
+        fadeAnimator?.cancel()
+        widthAnimator?.cancel()
+        hide()
+    }
+
+    fun onScreenOn() {
+        if (!prefs.showOnlyWhenFocused) {
+            show(force = true)
         }
     }
 

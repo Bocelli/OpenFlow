@@ -13,6 +13,7 @@
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
     <uses-permission android:name="android.permission.WRITE_SECURE_SETTINGS" tools:ignore="ProtectedPermissions" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
     <application
         android:name=".OpenFlowApplication"
@@ -51,6 +52,18 @@
             android:name=".service.AudioRecordService"
             android:foregroundServiceType="microphone"
             android:exported="false" />
+
+        <!-- Silent Watchdog Receiver: auto-ripristino su sblocco schermo e riavvio -->
+        <receiver
+            android:name=".service.BootAndUnlockReceiver"
+            android:enabled="true"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.USER_PRESENT" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
 
         <!-- Quick Settings Tile for 1-tap bubble toggle in Notification Shade -->
         <service
