@@ -643,7 +643,15 @@ class FlowAccessibilityService : AccessibilityService() {
                 .setContentIntent(pendingIntent)
                 .build()
 
-            notificationManager.notify(NOTIFICATION_PERSISTENT_ID, notification)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                startForeground(
+                    NOTIFICATION_PERSISTENT_ID,
+                    notification,
+                    android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE
+                )
+            } else {
+                startForeground(NOTIFICATION_PERSISTENT_ID, notification)
+            }
         } catch (e: Exception) {
             Log.e(TAG, "Impossibile mostrare notifica persistente: ${e.message}")
         }
@@ -651,6 +659,12 @@ class FlowAccessibilityService : AccessibilityService() {
 
     private fun cancelOngoingNotification() {
         try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                stopForeground(STOP_FOREGROUND_REMOVE)
+            } else {
+                @Suppress("DEPRECATION")
+                stopForeground(true)
+            }
             val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as? android.app.NotificationManager
             notificationManager?.cancel(NOTIFICATION_PERSISTENT_ID)
         } catch (_: Exception) {}

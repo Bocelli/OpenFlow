@@ -1,7 +1,7 @@
 {
-  "versionCode": 5,
-  "versionName": "1.0.5",
-  "releaseNotes": "• Risoluzione definitiva crash HyperOS a schermo spento: adozione di TYPE_APPLICATION_OVERLAY per eliminare i timeout di AccessibilityManagerService\n• Gestione ciclo schermo con ricevitore SCREEN_OFF e USER_PRESENT (sospensione a schermo spento e ripristino istantaneo allo sblocco)\n• Watchdog silente BootAndUnlockReceiver per auto-ripristino trasparente in background\n• Stabilità continua garantita anche dopo ore di standby prolungato",
+  "versionCode": 6,
+  "versionName": "1.0.6",
+  "releaseNotes": "• Elevazione a Servizio Foreground Android ufficiale (startForeground con specialUse): immunità garantita contro lmkd, compattazione RAM e killer di HyperOS (camopt_killer)\n• Process priority elevata da CACHED (adj 900+) a FOREGROUND_SERVICE (adj <= 200)\n• Auto-Healing potenziato con goAsync() su sblocco schermo (USER_PRESENT) e avvio app\n• Ripristino automatico e trasparente dello stato d'accessibilità senza interventi manuali",
   "downloadUrl": "https://raw.githubusercontent.com/Bocelli/OpenFlow/main/releases/OpenFlow-Release-C-NotchDocked.apk",
-  "publishedAt": "2026-11-07"
+  "githubReleaseUrl": "https://github.com/Bocelli/OpenFlow/releases/latest"
 }

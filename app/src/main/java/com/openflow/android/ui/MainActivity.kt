@@ -112,6 +112,9 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         resumeCount.value++
+        if (isAccessibilityServiceEnabled(this) && FlowAccessibilityService.instance == null) {
+            FlowAccessibilityService.restartAccessibilityServiceIfPermitted(this)
+        }
     }
 }
 
@@ -1593,6 +1596,13 @@ fun SwitchSettingRow(
 
 internal fun isAccessibilityServiceEnabled(context: Context): Boolean {
     if (FlowAccessibilityService.instance != null) return true
+    try {
+        val enabledSetting = Settings.Secure.getString(
+            context.contentResolver,
+            Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES
+        ) ?: ""
+        if (enabledSetting.contains(context.packageName)) return true
+    } catch (_: Exception) {}
     val am = context.getSystemService(Context.ACCESSIBILITY_SERVICE) as? AccessibilityManager ?: return false
     val enabledServices = am.getEnabledAccessibilityServiceList(AccessibilityServiceInfo.FEEDBACK_ALL_MASK)
     return enabledServices.any { it.resolveInfo.serviceInfo.packageName == context.packageName }
