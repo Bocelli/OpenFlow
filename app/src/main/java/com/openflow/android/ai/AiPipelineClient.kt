@@ -343,15 +343,29 @@ class AiPipelineClient(private val prefs: PreferencesManager) {
 
         // Per Groq: sequenza dinamica con cache locale e auto-discovery modelli
         if (provider == com.openflow.android.data.ApiProvider.GROQ) {
-            val candidateModels = sequence {
-                prefs.cachedGroqModel?.let { yield(it) }
-                yield(provider.llmModel)
-                yieldAll(GROQ_DEFAULT_MODELS)
-                yieldAll(discoverActiveGroqModels(cleanKey))
-            }.distinct().take(4)
+            val candidateModels = mutableListOf<String>()
+
+            // 1. Modello in cache valido
+            prefs.cachedGroqModel?.let { cached ->
+                if (cached.isNotBlank()) candidateModels.add(cached)
+            }
+
+            // 2. Modelli attivi scoperti dinamicamente interrogando /models di Groq
+            val discovered = discoverActiveGroqModels(cleanKey)
+            if (discovered.isNotEmpty()) {
+                candidateModels.addAll(discovered)
+            } else {
+                // Fallback prioritario sicuro solo se la discovery di rete fallisce
+                candidateModels.addAll(GROQ_PREFERRED_MODELS)
+            }
+
+            // 3. Fallback sul modello standard configurato
+            candidateModels.add(provider.llmModel)
+
+            val uniqueCandidates = candidateModels.distinct()
 
             var lastError: Exception? = null
-            for (model in candidateModels) {
+            for (model in uniqueCandidates) {
                 Log.d(TAG, "Tentativo Groq LLM con modello: $model")
                 val res = executeLlmCall(rawText, cleanKey, cleanBaseUrl, model)
                 if (res.isSuccess) {
@@ -388,37 +402,32 @@ class AiPipelineClient(private val prefs: PreferencesManager) {
             if (!resp.isSuccessful) return emptyList()
             val json = JSONObject(body)
             val data = json.optJSONArray("data") ?: return emptyList()
-            val candidates = mutableListOf<String>()
+            val available = mutableSetOf<String>()
             for (i in 0 until data.length()) {
-                val id = data.getJSONObject(i).optString("id", "")
-                val lower = id.lowercase()
-                if (id.isNotBlank() &&
-                    !lower.contains("whisper") &&
-                    !lower.contains("guard") &&
-                    !lower.contains("moderation") &&
-                    !lower.contains("vision") &&
-                    !lower.contains("orpheus") &&
-                    !lower.contains("tts") &&
-                    !lower.contains("embedding")) {
-                    candidates.add(id)
+                val id = data.getJSONObject(i).optString("id", "").trim()
+                if (id.isNotBlank()) {
+                    available.add(id)
                 }
             }
-            candidates.sortedWith(Comparator { a, b ->
-                fun score(name: String): Int {
-                    val n = name.lowercase()
-                    return when {
-                        n.contains("gpt-oss-120b") -> 100
-                        n.contains("gpt-oss-20b") -> 95
-                        n.contains("qwen3.8") || n.contains("qwen3.6") -> 90
-                        n.contains("qwen") -> 85
-                        n.contains("llama-3.3-70b") -> 80
-                        n.contains("llama-3.1-8b") -> 75
-                        n.contains("llama") -> 60
-                        else -> 50
-                    }
-                }
-                score(b).compareTo(score(a))
-            })
+
+            // Seleziona i modelli preferiti effettivamente abilitati per questo account
+            val matched = GROQ_PREFERRED_MODELS.filter { it in available }
+            if (matched.isNotEmpty()) {
+                Log.i(TAG, "Modelli Groq attivi selezionati: $matched")
+                return matched
+            }
+
+            // Fallback: qualsiasi modello che non sia whisper, guard o moderation
+            available.filter { id ->
+                val lower = id.lowercase()
+                !lower.contains("whisper") &&
+                !lower.contains("guard") &&
+                !lower.contains("moderation") &&
+                !lower.contains("vision") &&
+                !lower.contains("orpheus") &&
+                !lower.contains("tts") &&
+                !lower.contains("embedding")
+            }
         } catch (e: Exception) {
             Log.e(TAG, "Eccezione durante discovery modelli Groq: ${e.message}")
             emptyList()
@@ -456,9 +465,8 @@ class AiPipelineClient(private val prefs: PreferencesManager) {
             put("model", modelName)
             put("messages", messagesArray)
             put("temperature", 0.3)
-            // Minimo 800: tiene bassa la riserva TPM di Groq (niente HTTP 429). Cresce col testo perché l'output è
-            // lungo quanto l'input e un tetto fisso taglia le dettature lunghe (1 token >= 1 carattere).
-            put("max_tokens", maxOf(800, rawText.length).coerceAtMost(4000))
+            // Minimo 1024 token per consentire all'LLM (specialmente modelli reasoning) di completare il testo
+            put("max_tokens", maxOf(1024, rawText.length * 2).coerceAtMost(4000))
         }
 
         val jsonMediaType = "application/json; charset=utf-8".toMediaType()
@@ -511,13 +519,11 @@ class AiPipelineClient(private val prefs: PreferencesManager) {
             "gemini-2.5-flash"
         )
 
-        private val GROQ_DEFAULT_MODELS = listOf(
+        private val GROQ_PREFERRED_MODELS = listOf(
             "openai/gpt-oss-120b",
-            "openai/gpt-oss-20b",
             "qwen/qwen3.8-27b",
-            "qwen/qwen3.6-27b",
-            "llama-3.1-8b-instant",
-            "llama-3.3-70b-versatile"
+            "openai/gpt-oss-20b",
+            "allam-2-7b"
         )
 
         private val HALLUCINATION_EXACT_PHRASES = setOf(
@@ -606,7 +612,8 @@ class AiPipelineClient(private val prefs: PreferencesManager) {
             val prefixesToRemove = listOf(
                 "Message:", "Message :", "Messaggio:", "Messaggio :",
                 "Testo:", "Testo :", "Trascrizione:", "Output:",
-                "Ecco il testo:", "Ecco la trascrizione:", "Ecco il testo formattato:", "Ecco il racconto:"
+                "Ecco il testo:", "Ecco la trascrizione:", "Ecco il testo formattato:", "Ecco il racconto:",
+                "Ecco il testo corretto:", "Ecco il testo elaborato:", "Testo corretto:"
             )
             for (prefix in prefixesToRemove) {
                 if (clean.startsWith(prefix, ignoreCase = true)) {

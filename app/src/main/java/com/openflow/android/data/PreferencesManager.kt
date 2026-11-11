@@ -10,7 +10,7 @@ enum class ApiProvider(val displayName: String, val baseUrl: String, val asrMode
         displayName = "Groq (Free LPU ~200ms)",
         baseUrl = "https://api.groq.com/openai/v1",
         asrModel = "whisper-large-v3-turbo",
-        llmModel = "openai/gpt-oss-20b"
+        llmModel = "openai/gpt-oss-120b"
     ),
     GEMINI(
         displayName = "Google Gemini (Free AI Studio)",
@@ -189,7 +189,14 @@ class PreferencesManager(context: Context) {
         set(value) = prefs.edit().putString("cached_gemini_model", value).apply()
 
     var cachedGroqModel: String?
-        get() = prefs.getString("cached_groq_model", null)
+        get() {
+            val m = prefs.getString("cached_groq_model", null)
+            if (m != null && (m.contains("llama") || m.contains("qwen3.6"))) {
+                prefs.edit().remove("cached_groq_model").apply()
+                return null
+            }
+            return m
+        }
         set(value) = prefs.edit().putString("cached_groq_model", value).apply()
 
     val currentApiKey: String

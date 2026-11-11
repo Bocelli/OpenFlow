@@ -1,7 +1,7 @@
 {
-  "versionCode": 6,
-  "versionName": "1.0.6",
-  "releaseNotes": "• Elevazione a Servizio Foreground Android ufficiale (startForeground con specialUse): immunità garantita contro lmkd, compattazione RAM e killer di HyperOS (camopt_killer)\n• Process priority elevata da CACHED (adj 900+) a FOREGROUND_SERVICE (adj <= 200)\n• Auto-Healing potenziato con goAsync() su sblocco schermo (USER_PRESENT) e avvio app\n• Ripristino automatico e trasparente dello stato d'accessibilità senza interventi manuali",
+  "versionCode": 7,
+  "versionName": "1.0.7",
+  "releaseNotes": "• Risolto bug mancata riformattazione testo: integrati i nuovi modelli Groq ad altissima velocità (openai/gpt-oss-120b, openai/gpt-oss-20b, qwen3.8-27b)\n• Auto-discovery dinamico dei modelli Groq attivi sull'account: addio errori 404 e fallback forzato su Whisper grezzo\n• Purga automatica della cache locale da vecchi modelli deprecati (llama-3.3, llama-3.1)\n• Ampliato il buffer max_tokens per gestire i token di reasoning senza troncamenti",
   "downloadUrl": "https://raw.githubusercontent.com/Bocelli/OpenFlow/main/releases/OpenFlow-Release-C-NotchDocked.apk",
   "githubReleaseUrl": "https://github.com/Bocelli/OpenFlow/releases/latest"
 }
