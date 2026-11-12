@@ -1,7 +1,7 @@
 {
-  "versionCode": 7,
-  "versionName": "1.0.7",
-  "releaseNotes": "• Risolto bug mancata riformattazione testo: integrati i nuovi modelli Groq ad altissima velocità (openai/gpt-oss-120b, openai/gpt-oss-20b, qwen3.8-27b)\n• Auto-discovery dinamico dei modelli Groq attivi sull'account: addio errori 404 e fallback forzato su Whisper grezzo\n• Purga automatica della cache locale da vecchi modelli deprecati (llama-3.3, llama-3.1)\n• Ampliato il buffer max_tokens per gestire i token di reasoning senza troncamenti",
+  "versionCode": 8,
+  "versionName": "1.0.8",
+  "releaseNotes": "• Supporto completo e fix per ColorOS / OxygenOS (OnePlus, OPPO, Realme)\n• Nuovo pulsante intelligente '🎯 Centra su Foro': allineamento hardware automatico tramite DisplayCutout al punch-hole (anche laterale es. OnePlus 8T a -210dp)\n• Algoritmo di espansione alare adattivo: previene qualsiasi taglio fuori schermo della capsula quando è ancorata negli angoli\n• Riconoscimento istantaneo delle tastiere di sistema (IME attivo, Baidu Oppo, Sogou, SwiftKey, Gboard, Honeyboard)\n• Isteresi di transizione a 1200ms per azzerare sfarfallii e nascondimenti a scatti su ColorOS\n• Pulizia del Registro Diagnostico dai falsi allarmi dei log di debug proprietari OEM",
   "downloadUrl": "https://raw.githubusercontent.com/Bocelli/OpenFlow/main/releases/OpenFlow-Release-C-NotchDocked.apk",
   "githubReleaseUrl": "https://github.com/Bocelli/OpenFlow/releases/latest"
 }
