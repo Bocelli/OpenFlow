@@ -242,15 +242,23 @@ object PowerOptimizationHelper {
 
             DeviceBrand.OPPO_ONEPLUS -> listOf(
                 Intent().apply {
+                    component = ComponentName("com.oplus.safecenter", "com.oplus.safecenter.startupapp.StartupAppListActivity")
+                    flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                },
+                Intent().apply {
+                    component = ComponentName("com.oplus.safecenter", "com.oplus.safecenter.permission.startup.StartupAppListActivity")
+                    flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                },
+                Intent().apply {
+                    component = ComponentName("com.oplus.battery", "com.oplus.battery.AppListActivity")
+                    flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                },
+                Intent().apply {
                     component = ComponentName("com.coloros.safecenter", "com.coloros.safecenter.permission.startup.StartupAppListActivity")
                     flags = Intent.FLAG_ACTIVITY_NEW_TASK
                 },
                 Intent().apply {
                     component = ComponentName("com.coloros.safecenter", "com.coloros.safecenter.startupapp.StartupAppListActivity")
-                    flags = Intent.FLAG_ACTIVITY_NEW_TASK
-                },
-                Intent().apply {
-                    component = ComponentName("com.oplus.battery", "com.oplus.battery.AppListActivity")
                     flags = Intent.FLAG_ACTIVITY_NEW_TASK
                 },
                 Intent().apply {

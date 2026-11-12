@@ -186,12 +186,20 @@ object LogDumpManager {
 
             val relevantKeywords = listOf(
                 "OpenFlow", "FlowAccessibility", "NotchIslandOverlay", "AudioRecord",
-                "AiPipeline", "AndroidRuntime", "FATAL", "Exception", "WindowManager"
+                "AiPipeline", "AndroidRuntime", "FATAL"
+            )
+
+            // Ignora tag e classi OEM proprietarie (ColorOS, MIUI, Snapdragon) che generano falsi allarmi
+            val ignoredOemTags = listOf(
+                "callGcSupression", "OplusScrollToTopManager", "ScrollOptim", "ViewRootImplExtImpl",
+                "Quality", "SurfaceControl", "ActivityThread", "ImeTracker"
             )
 
             while (reader.readLine().also { line = it } != null) {
                 val current = line ?: continue
-                if (relevantKeywords.any { current.contains(it, ignoreCase = true) }) {
+                if (ignoredOemTags.any { current.contains(it) }) continue
+                if (relevantKeywords.any { current.contains(it, ignoreCase = true) } ||
+                    (current.contains("Exception", ignoreCase = true) && current.contains("com.openflow.android"))) {
                     lines.add(sanitizeSecrets(current))
                 }
             }

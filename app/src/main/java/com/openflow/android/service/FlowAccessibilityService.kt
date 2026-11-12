@@ -126,7 +126,7 @@ class FlowAccessibilityService : AccessibilityService() {
 
         initBubbleOverlay()
         if (prefs.showOnlyWhenFocused) {
-            scheduleHideBubbleIfIdle(delayMs = 700)
+            scheduleHideBubbleIfIdle(delayMs = 1200)
         } else {
             bubbleOverlay?.show(force = true)
         }
@@ -224,7 +224,7 @@ class FlowAccessibilityService : AccessibilityService() {
             } else {
                 // Nessun input attivo e nessuna tastiera aperta:
                 if (prefs.showOnlyWhenFocused) {
-                    scheduleHideBubbleIfIdle(delayMs = 700)
+                    scheduleHideBubbleIfIdle(delayMs = 1200)
                 } else {
                     // In modalità persistente, torna in semi-trasparenza dopo 3.5s per non coprire i contenuti
                     bubbleOverlay?.scheduleStealth(3500)
@@ -235,10 +235,35 @@ class FlowAccessibilityService : AccessibilityService() {
         }
     }
 
-    private fun scheduleHideBubbleIfIdle(delayMs: Long = 700) {
+    private fun scheduleHideBubbleIfIdle(delayMs: Long = 1200) {
         if (!prefs.showOnlyWhenFocused) return
         mainHandler.removeCallbacks(hideBubbleRunnable)
         mainHandler.postDelayed(hideBubbleRunnable, delayMs)
+    }
+
+    private var cachedDefaultImePackage: String? = null
+    private var lastImeCheckTime: Long = 0L
+
+    /**
+     * Interroga in modo sicuro e leggero il package della tastiera software (IME) predefinita dell'utente.
+     */
+    private fun getDefaultImePackage(): String {
+        val now = System.currentTimeMillis()
+        if (cachedDefaultImePackage != null && (now - lastImeCheckTime < 10_000L)) {
+            return cachedDefaultImePackage ?: ""
+        }
+        lastImeCheckTime = now
+        return try {
+            val defaultIme = android.provider.Settings.Secure.getString(
+                contentResolver,
+                android.provider.Settings.Secure.DEFAULT_INPUT_METHOD
+            )
+            val pkg = defaultIme?.split("/")?.firstOrNull()?.lowercase() ?: ""
+            cachedDefaultImePackage = pkg
+            pkg
+        } catch (_: Exception) {
+            ""
+        }
     }
 
     private var cachedKeyboardVisible: Boolean = false
@@ -296,7 +321,18 @@ class FlowAccessibilityService : AccessibilityService() {
         if (source?.isPassword == true) return false
         if (cls.contains("Password", ignoreCase = true) || cls.contains("PinEntry", ignoreCase = true)) return false
 
-        if (pkg.contains("inputmethod") || pkg.contains("keyboard") || pkg.contains(".ime")) {
+        // Riconoscimento prioritario: tastiera software attiva di sistema
+        val currentIme = getDefaultImePackage()
+        if (currentIme.isNotBlank() && (pkg == currentIme || pkg.startsWith(currentIme))) {
+            return true
+        }
+
+        // Riconoscimento euristico di tutte le tastiere OEM (ColorOS/Oppo Baidu, Samsung Honeyboard, SwiftKey, Gboard, ecc.)
+        if (pkg.contains("input") || pkg.contains("keyboard") || pkg.contains("ime") ||
+            pkg.contains("swiftkey") || pkg.contains("honeyboard") || pkg.contains("gboard") ||
+            pkg.contains("touchtype") || pkg.contains("fleksy") || pkg.contains("latin") ||
+            pkg.contains("oppo") || pkg.contains("oplus")
+        ) {
             return true
         }
         if (source == null) return false

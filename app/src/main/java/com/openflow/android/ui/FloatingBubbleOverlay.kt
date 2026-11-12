@@ -118,6 +118,22 @@ class FloatingBubbleOverlay(
     }
 
     /**
+     * Calcola l'offset X effettivo vincolato ai margini dello schermo.
+     * Consente all'isola di ancorarsi ai punch-hole laterali (es. OnePlus 8T, Realme, Oppo a -210dp)
+     * e assicura che durante l'espansione alare l'overlay non venga mai tagliato fuori dal display.
+     */
+    private fun getClampedXPx(widthPx: Int): Int {
+        val dm = context.resources.displayMetrics
+        val screenWidthPx = dm.widthPixels
+        val desiredX = dpToPx(prefs.notchOffsetX)
+        val halfW = widthPx / 2
+        val marginPx = dpToPx(MARGIN_DP)
+
+        val maxDisplacement = ((screenWidthPx / 2) - halfW - marginPx).coerceAtLeast(0)
+        return desiredX.coerceIn(-maxDisplacement, maxDisplacement)
+    }
+
+    /**
      * Calcola dinamicamente l'offset verticale del notch su qualsiasi smartphone Android (Samsung One UI, Pixel, HyperOS).
      * Interroga le WindowMetrics di sistema per ottenere l'altezza reale della status bar (es. 40dp su S25 Ultra, 48dp su POCO, 52dp su Pixel)
      * e centra la capsula esattamente a metà altezza dove risiede il sensore della fotocamera frontale.
@@ -160,7 +176,7 @@ class FloatingBubbleOverlay(
         view.scaleX = 1f
         view.scaleY = 1f
 
-        params.x = dpToPx(prefs.notchOffsetX)
+        params.x = getClampedXPx(currentWidthPx)
         params.y = dpToPx(getAutoTopOffsetDp() + prefs.notchOffsetY)
         params.flags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
                 WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
@@ -252,7 +268,7 @@ class FloatingBubbleOverlay(
             PixelFormat.TRANSLUCENT
         ).apply {
             gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL
-            x = dpToPx(prefs.notchOffsetX)
+            x = getClampedXPx(currentWidthPx)
             y = dpToPx(getAutoTopOffsetDp() + prefs.notchOffsetY)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
                 layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS
@@ -332,7 +348,7 @@ class FloatingBubbleOverlay(
     fun updateNotchPosition() {
         val params = layoutParams ?: return
         val view = bubbleView ?: return
-        params.x = dpToPx(prefs.notchOffsetX)
+        params.x = getClampedXPx(currentWidthPx)
         params.y = dpToPx(getAutoTopOffsetDp() + prefs.notchOffsetY)
         try {
             windowManager.updateViewLayout(view, params)
@@ -437,7 +453,7 @@ class FloatingBubbleOverlay(
                 currentHeightPx = h
                 params.width = w
                 params.height = h
-                params.x = dpToPx(prefs.notchOffsetX)
+                params.x = getClampedXPx(w)
                 params.y = dpToPx(getAutoTopOffsetDp() + prefs.notchOffsetY)
                 try {
                     windowManager.updateViewLayout(view, params)

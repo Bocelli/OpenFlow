@@ -7,8 +7,10 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
+import android.view.WindowManager
 import android.view.accessibility.AccessibilityManager
 import android.widget.Toast
 import androidx.activity.ComponentActivity
@@ -802,19 +804,72 @@ fun MainSettingsScreen(
                         fontWeight = FontWeight.SemiBold,
                         color = TextPrimary
                     )
-                    Text(
-                        text = "Offset X: ${notchOffsetX.toInt()} dp",
-                        fontSize = 12.sp,
-                        color = TextSecondary
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "Offset X: ${notchOffsetX.toInt()} dp",
+                            fontSize = 12.sp,
+                            color = TextSecondary
+                        )
+                        Text(
+                            text = if (notchOffsetX < -25f) "Angolo Sinistro (OnePlus/Oppo)" else if (notchOffsetX > 25f) "Angolo Destro" else "Centro",
+                            fontSize = 11.sp,
+                            color = if (notchOffsetX != 0f) StatusEmerald else TextMuted
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         Button(
                             onClick = {
-                                val newX = (notchOffsetX - 1f).coerceIn(-20f, 20f)
+                                val detectedOffset = detectCameraPunchHoleOffsetX(context)
+                                if (detectedOffset != null) {
+                                    val rounded = kotlin.math.round(detectedOffset)
+                                    notchOffsetX = rounded
+                                    prefs.notchOffsetX = rounded
+                                    FlowAccessibilityService.instance?.updateNotchPosition()
+                                    Toast.makeText(context, "🎯 Allineato su foro fotocamera (${rounded.toInt()} dp)", Toast.LENGTH_SHORT).show()
+                                } else {
+                                    Toast.makeText(context, "Foro fotocamera non rilevato via hardware. Usa i tasti manuali.", Toast.LENGTH_SHORT).show()
+                                }
+                            },
+                            modifier = Modifier.weight(1.3f),
+                            shape = RoundedCornerShape(8.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = CardHighlight)
+                        ) {
+                            Text("🎯 Centra su Foro", color = StatusEmerald, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                        }
+
+                        Button(
+                            onClick = {
+                                notchOffsetX = 0f
+                                prefs.notchOffsetX = 0f
+                                FlowAccessibilityService.instance?.updateNotchPosition()
+                                Toast.makeText(context, "Ripristinato al centro (0 dp)", Toast.LENGTH_SHORT).show()
+                            },
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(8.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = CardElevated)
+                        ) {
+                            Text("Centro (0 dp)", color = TextPrimary, fontSize = 12.sp)
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Button(
+                            onClick = {
+                                val newX = (notchOffsetX - 10f).coerceIn(-250f, 250f)
                                 notchOffsetX = newX
                                 prefs.notchOffsetX = newX
                                 FlowAccessibilityService.instance?.updateNotchPosition()
@@ -823,11 +878,11 @@ fun MainSettingsScreen(
                             shape = RoundedCornerShape(8.dp),
                             colors = ButtonDefaults.buttonColors(containerColor = CardElevated)
                         ) {
-                            Text("◀ Sinistra (-1dp)", color = TextPrimary, fontSize = 13.sp)
+                            Text("-10", color = TextPrimary, fontSize = 12.sp)
                         }
                         Button(
                             onClick = {
-                                val newX = (notchOffsetX + 1f).coerceIn(-20f, 20f)
+                                val newX = (notchOffsetX - 1f).coerceIn(-250f, 250f)
                                 notchOffsetX = newX
                                 prefs.notchOffsetX = newX
                                 FlowAccessibilityService.instance?.updateNotchPosition()
@@ -836,7 +891,33 @@ fun MainSettingsScreen(
                             shape = RoundedCornerShape(8.dp),
                             colors = ButtonDefaults.buttonColors(containerColor = CardElevated)
                         ) {
-                            Text("▶ Destra (+1dp)", color = TextPrimary, fontSize = 13.sp)
+                            Text("◀ -1", color = TextPrimary, fontSize = 12.sp)
+                        }
+                        Button(
+                            onClick = {
+                                val newX = (notchOffsetX + 1f).coerceIn(-250f, 250f)
+                                notchOffsetX = newX
+                                prefs.notchOffsetX = newX
+                                FlowAccessibilityService.instance?.updateNotchPosition()
+                            },
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(8.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = CardElevated)
+                        ) {
+                            Text("+1 ▶", color = TextPrimary, fontSize = 12.sp)
+                        }
+                        Button(
+                            onClick = {
+                                val newX = (notchOffsetX + 10f).coerceIn(-250f, 250f)
+                                notchOffsetX = newX
+                                prefs.notchOffsetX = newX
+                                FlowAccessibilityService.instance?.updateNotchPosition()
+                            },
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(8.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = CardElevated)
+                        ) {
+                            Text("+10", color = TextPrimary, fontSize = 12.sp)
                         }
                     }
                 }
@@ -1606,4 +1687,33 @@ internal fun isAccessibilityServiceEnabled(context: Context): Boolean {
     val am = context.getSystemService(Context.ACCESSIBILITY_SERVICE) as? AccessibilityManager ?: return false
     val enabledServices = am.getEnabledAccessibilityServiceList(AccessibilityServiceInfo.FEEDBACK_ALL_MASK)
     return enabledServices.any { it.resolveInfo.serviceInfo.packageName == context.packageName }
+}
+
+/**
+ * Rileva tramite le API hardware di DisplayCutout (Android 11+) la posizione orizzontale
+ * esatta del punch-hole della fotocamera frontale (Centro, Angolo Sinistro es. OnePlus/Oppo, o Destro).
+ * Restituisce l'offset in DP rispetto al centro dello schermo.
+ */
+internal fun detectCameraPunchHoleOffsetX(context: Context): Float? {
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return null
+    return try {
+        val wm = context.getSystemService(Context.WINDOW_SERVICE) as? WindowManager ?: return null
+        val insets = wm.currentWindowMetrics.windowInsets
+        val cutout = insets.displayCutout ?: return null
+        val rects = cutout.boundingRects
+        if (rects.isEmpty()) return null
+
+        val dm = context.resources.displayMetrics
+        val screenWidthPx = dm.widthPixels
+        val screenCenterX = screenWidthPx / 2f
+
+        val topCutout = rects.minByOrNull { it.top } ?: return null
+        val cameraCenterX = topCutout.centerX()
+
+        val offsetPx = cameraCenterX - screenCenterX
+        val offsetDp = offsetPx / dm.density
+        offsetDp
+    } catch (_: Exception) {
+        null
+    }
 }
